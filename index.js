@@ -3,10 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 const app = express();
-const {
-  MongoClient,
-  ServerApiVersion,
-} = require("mongodb");
+const { MongoClient, ServerApiVersion } = require("mongodb");
 
 // middleware
 app.use(cors());
@@ -37,8 +34,9 @@ async function run() {
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
 
-    const userCollection = client.db("coffeeDB").collection("users");
-
+    const userCollection = client.db("Brainiacs").collection("users");
+    
+    //user collection is empty now
     app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
