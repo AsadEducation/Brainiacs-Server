@@ -3,9 +3,8 @@ const cors = require("cors");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 const app = express();
-const { MongoClient, ServerApiVersion } = require("mongodb");
 
-// middleware
+
 app.use(cors());
 app.use(express.json());
 app.use(
@@ -30,19 +29,141 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     const userCollection = client.db("Brainiacs").collection("users");
-    
-    //user collection is empty now
+
     app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
+      console.log(result);
       res.send(result);
     });
+
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      if (!newUser.role) {
+        newUser.role = "user";
+      }
+      console.log("New User Data:", newUser);
+      const result = await userCollection.insertOne(newUser);
+      res.send(result);
+    });
+
+    app.get("/user", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.status(400).send({ error: "Email query parameter is required" });
+      }
+      const user = await userCollection.findOne({ email });
+      if (user) {
+        console.log("Fetched User:", user);
+        res.send(user);
+      } else {
+        res.status(404).send({ error: "User not found" });
+      }
+    });
+
+    app.get("/users/search", async (req, res) => {
+      const query = req.query.query;
+      if (!query) {
+        return res.status(400).send({ error: "Query parameter is required" });
+      }
+
+      try {
+        const words = query.split(" ").slice(0, 3).join(" "); // Extract the first three words
+        const regex = new RegExp(`^${words}`, "i"); // Match starting with the first three words
+        const users = await userCollection
+          .find({ $or: [{ name: regex }, { email: regex }] })
+          .limit(3)
+          .toArray();
+        res.send(users);
+      } catch (error) {
+        console.error("Error searching users:", error);
+        res.status(500).send({ error: "Failed to search users" });
+      }
+    });
+
+    app.get("/boards", async (req, res) => {
+      try {
+        const boards = await boardCollection.find().toArray();
+        res.send(boards);
+      } catch (error) {
+        console.error("Error fetching boards:", error);
+        res.status(500).send({ error: "Failed to fetch boards" });
+      }
+    });
+
+    app.get("/boards/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid board ID" });
+        }
+
+        const board = await boardCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+
+        res.send(board);
+      } catch (error) {
+        console.error("Error fetching board:", error);
+        res.status(500).send({ error: "Failed to fetch board" });
+      }
+    });
+
+    app.post("/boards", async (req, res) => {
+      const { name, visibility, theme, creator, members } = req.body;
+      if (!name || !visibility || !creator) {
+        return res.status(400).send({ error: "Board name, visibility, and creator are required" });
+      }
+
+      try {
+        const newBoard = { name, visibility, theme, creator, members: members || [] };
+        const result = await boardCollection.insertOne(newBoard);
+        res.send({ ...newBoard, id: result.insertedId });
+      } catch (error) {
+        console.error("Error creating board:", error);
+        res.status(500).send({ error: "Failed to create board" });
+      }
+    });
+
+    app.put("/boards/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedBoard = req.body;
+
+      if (!updatedBoard.name || !updatedBoard.visibility) {
+        return res.status(400).send({ error: "Board name and visibility are required" });
+      }
+
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid board ID" });
+        }
+
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedBoard }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+
+        res.send({ message: "Board updated successfully" });
+      } catch (error) {
+        console.error("Error updating board:", error);
+        res.status(500).send({ error: "Failed to update board" });
+      }
+    });
+
+    // Removed DELETE /boards/:id endpoint
+    
   } finally {
+    // Ensure the client connection is properly closed if needed
   }
 }
 run().catch(console.dir);
