@@ -47,6 +47,8 @@ async function run() {
       res.send(result);
     });
 
+
+    
     app.post("/users", async (req, res) => {
       const newUser = req.body;
       if (!newUser.role) {
