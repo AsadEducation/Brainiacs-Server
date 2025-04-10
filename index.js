@@ -11,8 +11,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://brainiacs-team-collaboration.vercel.app",
-      "https://testing-brainiacs.vercel.app",
+      //deploy link ta ekhane boshayen please 
+      //na hoy may error dite pare.
     ],
   })
 );
