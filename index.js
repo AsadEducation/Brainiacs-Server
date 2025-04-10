@@ -29,10 +29,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-
-    const database = client.db("Brainiacs");
     const userCollection = client.db("Brainiacs").collection("users");
     const columnCollection = database.collection("Columns");
     const taskCollection = database.collection("Tasks");
@@ -43,7 +40,6 @@ async function run() {
     app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
-      console.log(result);
       res.send(result);
     });
 
@@ -54,7 +50,6 @@ async function run() {
       if (!newUser.role) {
         newUser.role = "user";
       }
-      console.log("New User Data:", newUser);
       const result = await userCollection.insertOne(newUser);
       res.send(result);
     });
@@ -66,7 +61,6 @@ async function run() {
       }
       const user = await userCollection.findOne({ email });
       if (user) {
-        console.log("Fetched User:", user);
         res.send(user);
       } else {
         res.status(404).send({ error: "User not found" });
@@ -88,7 +82,6 @@ async function run() {
           .toArray();
         res.send(users);
       } catch (error) {
-        console.error("Error searching users:", error);
         res.status(500).send({ error: "Failed to search users" });
       }
     });
@@ -98,7 +91,6 @@ async function run() {
         const boards = await boardCollection.find().toArray();
         res.send(boards);
       } catch (error) {
-        console.error("Error fetching boards:", error);
         res.status(500).send({ error: "Failed to fetch boards" });
       }
     });
@@ -117,51 +109,95 @@ async function run() {
           return res.status(404).send({ error: "Board not found" });
         }
 
-        res.send(board);
+        // Populate member details
+        const memberDetails = await userCollection
+          .find({ _id: { $in: board.members.map((member) => new ObjectId(member.userId)) } })
+          .toArray();
+
+        const populatedMembers = board.members.map((member) => {
+          const user = memberDetails.find((user) => user._id.toString() === member.userId);
+          return {
+            ...member,
+            name: user?.name || "Unknown",
+            email: user?.email || "Unknown",
+            role: member.role || "member", // Ensure role is preserved
+          };
+        });
+
+        res.send({ ...board, members: populatedMembers });
       } catch (error) {
-        console.error("Error fetching board:", error);
         res.status(500).send({ error: "Failed to fetch board" });
       }
     });
 
     app.post("/boards", async (req, res) => {
-      const { name, visibility, theme, creator, members } = req.body;
-      if (!name || !visibility || !creator) {
-        return res.status(400).send({ error: "Board name, visibility, and creator are required" });
+      const { name, visibility, theme, createdBy } = req.body;
+    
+      // Validation
+      if (!name) {
+        return res.status(400).send({ error: "Board name is required" });
       }
-
+      if (!createdBy) {
+        return res.status(400).send({ error: "createdBy is required" });
+      }
+    
       try {
-        const newBoard = { name, visibility, theme, creator, members: members || [] };
+        const createdAt = new Date().toISOString();
+    
+        // Basic board data without members
+        const newBoard = {
+          name,
+          visibility: visibility || "Public",
+          theme: theme || "#3b82f6",
+          createdBy,
+          members: [], // Initialize with an empty members array
+          createdAt,
+        };
+    
+        // Insert into the database
         const result = await boardCollection.insertOne(newBoard);
-        res.send({ ...newBoard, id: result.insertedId });
+    
+        // Respond to the client
+        res.status(201).send({
+          ...newBoard,
+          _id: result.insertedId,
+        });
       } catch (error) {
-        console.error("Error creating board:", error);
         res.status(500).send({ error: "Failed to create board" });
       }
     });
 
     app.put("/boards/:id", async (req, res) => {
       const { id } = req.params;
-      const updatedBoard = req.body;
-
-      if (!updatedBoard.name || !updatedBoard.visibility) {
-        return res.status(400).send({ error: "Board name and visibility are required" });
-      }
-
+      const { members } = req.body;
+    
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ error: "Invalid board ID" });
         }
-
+    
+        if (members) {
+          if (!Array.isArray(members)) {
+            return res.status(400).send({ error: "Members must be an array" });
+          }
+    
+          // Validate each member's userId
+          for (const member of members) {
+            if (!member.userId || !ObjectId.isValid(member.userId)) {
+              return res.status(400).send({ error: "Invalid userId in members array" });
+            }
+          }
+        }
+    
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: updatedBoard }
+          { $set: { members } }
         );
-
+    
         if (result.matchedCount === 0) {
           return res.status(404).send({ error: "Board not found" });
         }
-
+    
         res.send({ message: "Board updated successfully" });
       } catch (error) {
         console.error("Error updating board:", error);
@@ -169,74 +205,6 @@ async function run() {
       }
     });
 
-    // Removed DELETE /boards/:id endpoint
-
-
-
-
-    // task management board
-
-    //  column related apis 
-    app.get("/columns", async (req, res) => {
-      console.log("hit the column get");
-      const result = await columnCollection.find().sort({ order: 1 }).toArray();
-      res.send(result);
-    })
-    app.post("/columns", async (req, res) => {
-      console.log("hit the columns post api")
-      const column = req.body;
-      const newColumns = { ...column, order: column.length }
-      const result = await columnCollection.insertOne(newColumns);
-      res.send(result);
-    })
-
-    app.put("/columns", async (req, res) => {
-      console.log("hit the columns put api");
-      const columnSet = req.body;
-      console.log("columnSet:", columnSet)
-      const updateOperations = columnSet.map((column, index) => {
-        const { _id, ...columnData } = column;
-        columnCollection.updateOne(
-          { id: column.id },
-          { $set: { ...columnData, order: index } },
-          { upsert: true }
-        )
-      });
-      await Promise.all(updateOperations);
-
-      res.send({ message: "Tasks updated" });
-
-    });
-
-
-    // task related apis
-    app.get("/tasks", async (req, res) => {
-      const result = await taskCollection.find().sort({ order: 1 }).toArray();
-      res.send(result);
-    })
-    app.post("/tasks", async (req, res) => {
-      const task = req.body;
-      const newTask = { ...task }
-      const result = await taskCollection.insertOne(newTask);
-      res.send(result);
-    })
-    app.put("/tasks", async (req, res) => {
-      console.log("hit the task put api");
-      const taskSet = req.body;
-      console.log("taskSet:", taskSet)
-      const updateOperations = taskSet.map((task, index) => {
-        const { _id, ...taskData } = task;
-        taskCollection.updateOne(
-          { id: task.id },
-          { $set: { ...taskData, order: index } },
-          { upsert: true }
-        )
-      });
-      await Promise.all(updateOperations);
-
-      res.send({ message: "Tasks updated" });
-
-    })
 
   } finally {
     // Ensure the client connection is properly closed if needed
