@@ -29,10 +29,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // <<<<<<< HEAD
-    // =======
-
-    // >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
 
     const database = client.db("Brainiacs");
     const userCollection = client.db("Brainiacs").collection("users");
@@ -48,23 +44,57 @@ async function run() {
 
     app.post("/users", async (req, res) => {
       const newUser = req.body;
-      if (!newUser.role) {
-        newUser.role = "user";
+
+      // Validation
+      if (!newUser.name || !newUser.email) {
+        return res.status(400).send({ error: "User name and email are required" });
       }
-      const result = await userCollection.insertOne(newUser);
-      res.send(result);
+
+      try {
+        // Check if the user already exists
+        const existingUser = await userCollection.findOne({ email: newUser.email });
+        if (existingUser) {
+          return res.status(400).send({ error: "User already exists" });
+        }
+
+        // Set default role if not provided
+        if (!newUser.role) {
+          newUser.role = "user";
+        }
+
+        const result = await userCollection.insertOne(newUser);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error saving user:", error);
+        res.status(500).send({ error: "Failed to save user" });
+      }
     });
 
     app.get("/user", async (req, res) => {
-      const email = req.query.email;
-      if (!email) {
-        return res.status(400).send({ error: "Email query parameter is required" });
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(400).send({ error: "Authorization token is required" });
       }
-      const user = await userCollection.findOne({ email });
-      if (user) {
+
+      const token = authHeader.split(" ")[1]; // Extract the token
+      try {
+        // Validate the token (if applicable, e.g., using Firebase Admin SDK or JWT)
+        // For now, assume the token is valid and fetch the user by email or ID
+        const email = req.query.email; // Optional: Use email if provided
+        if (!email) {
+          return res.status(400).send({ error: "Email query parameter is required" });
+        }
+
+        const user = await userCollection.findOne({ email });
+        if (!user) {
+          return res.status(404).send({ error: "User not found" });
+        }
+
         res.send(user);
-      } else {
-        res.status(404).send({ error: "User not found" });
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: "Failed to fetch user" });
       }
     });
 
@@ -141,29 +171,30 @@ async function run() {
       if (!createdBy) {
         return res.status(400).send({ error: "createdBy is required" });
       }
+      if (!ObjectId.isValid(createdBy)) {
+        return res.status(400).send({ error: "Invalid createdBy ID" });
+      }
 
       try {
         const createdAt = new Date().toISOString();
 
-        // Basic board data without members
         const newBoard = {
           name,
           visibility: visibility || "Public",
           theme: theme || "#3b82f6",
           createdBy,
-          members: [], // Initialize with an empty members array
+          members: [],
           createdAt,
         };
 
-        // Insert into the database
         const result = await boardCollection.insertOne(newBoard);
 
-        // Respond to the client
         res.status(201).send({
           ...newBoard,
           _id: result.insertedId,
         });
       } catch (error) {
+        console.error("Error creating board:", error);
         res.status(500).send({ error: "Failed to create board" });
       }
     });
@@ -182,10 +213,10 @@ async function run() {
             return res.status(400).send({ error: "Members must be an array" });
           }
 
-          // Validate each member's userId
+          // Validate each member's data
           for (const member of members) {
             if (!member.userId || !ObjectId.isValid(member.userId)) {
-              return res.status(400).send({ error: "Invalid userId in members array" });
+              return res.status(400).send({ error: `Invalid userId: ${member.userId}` });
             }
           }
         }
