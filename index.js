@@ -206,27 +206,26 @@ async function run() {
       }
     });
 
-    // <<<<<<< HEAD
-    //     app.delete("/boards/:id", async (req, res) => {
-    //       const { id } = req.params;
-
-    //       try {
-    //         if (!ObjectId.isValid(id)) {
-    //           return res.status(400).send({ error: "Invalid board ID" });
-    //         }
-
-    //         const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
-
-    //         if (result.deletedCount === 0) {
-    //           return res.status(404).send({ error: "Board not found" });
-    //         }
-    //         res.send({ message: "Board deleted successfully" });
-    //       } catch (error) {
-    //         res.status(500).send({ error: "Failed to delete board" });
-    //       }
-    //     });
-
-    // =======
+     app.delete("/boards/:id", async (req, res) => {
+      const { id } = req.params;
+    
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid board ID" });
+        }
+    
+        const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
+    
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.send({ message: "Board deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting board:", error);
+        res.status(500).send({ error: "Failed to delete board" });
+      }
+    });
 
     // task management board
 
