@@ -206,6 +206,22 @@ async function run() {
 
     });
 
+    app.put("/columnName",async(req,res)=>{
+      const {id,tittle}=req.body;
+      console.log("Column Name update")
+      const query={
+        id:id
+      };
+      const updateInfo={
+        $set:{
+          tittle:tittle
+        }
+      }
+      const result=await columnCollection.updateOne(query,updateInfo);
+      res.send(result)
+
+    })
+
 
     // task related apis
     app.get("/tasks", async (req, res) => {
