@@ -29,11 +29,15 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-// <<<<<<< HEAD
-// =======
+    // <<<<<<< HEAD
+    // =======
 
-// >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
+    // >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
+
+    const database = client.db("Brainiacs");
     const userCollection = client.db("Brainiacs").collection("users");
+    const columnCollection = database.collection("Columns");
+    const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
 
     app.get("/users", async (req, res) => {
@@ -129,7 +133,7 @@ async function run() {
 
     app.post("/boards", async (req, res) => {
       const { name, visibility, theme, createdBy } = req.body;
-    
+
       // Validation
       if (!name) {
         return res.status(400).send({ error: "Board name is required" });
@@ -137,10 +141,10 @@ async function run() {
       if (!createdBy) {
         return res.status(400).send({ error: "createdBy is required" });
       }
-    
+
       try {
         const createdAt = new Date().toISOString();
-    
+
         // Basic board data without members
         const newBoard = {
           name,
@@ -150,10 +154,10 @@ async function run() {
           members: [], // Initialize with an empty members array
           createdAt,
         };
-    
+
         // Insert into the database
         const result = await boardCollection.insertOne(newBoard);
-    
+
         // Respond to the client
         res.status(201).send({
           ...newBoard,
@@ -167,17 +171,17 @@ async function run() {
     app.put("/boards/:id", async (req, res) => {
       const { id } = req.params;
       const { members } = req.body;
-    
+
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ error: "Invalid board ID" });
         }
-    
+
         if (members) {
           if (!Array.isArray(members)) {
             return res.status(400).send({ error: "Members must be an array" });
           }
-    
+
           // Validate each member's userId
           for (const member of members) {
             if (!member.userId || !ObjectId.isValid(member.userId)) {
@@ -185,16 +189,16 @@ async function run() {
             }
           }
         }
-    
+
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { members } }
         );
-    
+
         if (result.matchedCount === 0) {
           return res.status(404).send({ error: "Board not found" });
         }
-    
+
         res.send({ message: "Board updated successfully" });
       } catch (error) {
         console.error("Error updating board:", error);
@@ -202,30 +206,110 @@ async function run() {
       }
     });
 
-// <<<<<<< HEAD
-//     app.delete("/boards/:id", async (req, res) => {
-//       const { id } = req.params;
+    // <<<<<<< HEAD
+    //     app.delete("/boards/:id", async (req, res) => {
+    //       const { id } = req.params;
 
-//       try {
-//         if (!ObjectId.isValid(id)) {
-//           return res.status(400).send({ error: "Invalid board ID" });
-//         }
+    //       try {
+    //         if (!ObjectId.isValid(id)) {
+    //           return res.status(400).send({ error: "Invalid board ID" });
+    //         }
 
-//         const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
+    //         const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
 
-//         if (result.deletedCount === 0) {
-//           return res.status(404).send({ error: "Board not found" });
-//         }
+    //         if (result.deletedCount === 0) {
+    //           return res.status(404).send({ error: "Board not found" });
+    //         }
+    //         res.send({ message: "Board deleted successfully" });
+    //       } catch (error) {
+    //         res.status(500).send({ error: "Failed to delete board" });
+    //       }
+    //     });
 
-//         res.send({ message: "Board deleted successfully" });
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to delete board" });
-//       }
-//     });
-    
-// =======
+    // =======
 
-// >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
+    // task management board
+
+    //  column related apis 
+    app.get("/columns", async (req, res) => {
+      console.log("hit the column get");
+      const result = await columnCollection.find().sort({ order: 1 }).toArray();
+      res.send(result);
+    })
+    app.post("/columns", async (req, res) => {
+      console.log("hit the columns post api")
+      const column = req.body;
+      const newColumns = { ...column, order: column.length }
+      const result = await columnCollection.insertOne(newColumns);
+      res.send(result);
+    })
+
+    app.put("/columns", async (req, res) => {
+      console.log("hit the columns put api");
+      const columnSet = req.body;
+      console.log("columnSet:", columnSet)
+      const updateOperations = columnSet.map((column, index) => {
+        const { _id, ...columnData } = column;
+        columnCollection.updateOne(
+          { id: column.id },
+          { $set: { ...columnData, order: index } },
+          { upsert: true }
+        )
+      });
+      await Promise.all(updateOperations);
+
+      res.send({ message: "Tasks updated" });
+
+    });
+
+    app.put("/columnName", async (req, res) => {
+      const { id, tittle } = req.body;
+      console.log("Column Name update")
+      const query = {
+        id: id
+      };
+      const updateInfo = {
+        $set: {
+          tittle: tittle
+        }
+      }
+      const result = await columnCollection.updateOne(query, updateInfo);
+      res.send(result)
+
+    })
+
+
+    // task related apis
+    app.get("/tasks", async (req, res) => {
+      const result = await taskCollection.find().sort({ order: 1 }).toArray();
+      res.send(result);
+    })
+    app.post("/tasks", async (req, res) => {
+      const task = req.body;
+      const newTask = { ...task }
+      const result = await taskCollection.insertOne(newTask);
+      res.send(result);
+    })
+    app.put("/tasks", async (req, res) => {
+      console.log("hit the task put api");
+      const taskSet = req.body;
+      console.log("taskSet:", taskSet)
+      const updateOperations = taskSet.map((task, index) => {
+        const { _id, ...taskData } = task;
+        taskCollection.updateOne(
+          { id: task.id },
+          { $set: { ...taskData, order: index } },
+          { upsert: true }
+        )
+      });
+      await Promise.all(updateOperations);
+
+      res.send({ message: "Tasks updated" });
+
+    })
+
+
+    // >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
   } finally {
     // Ensure the client connection is properly closed if needed
   }
