@@ -29,10 +29,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-// <<<<<<< HEAD
-// =======
-
-// >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
     const userCollection = client.db("Brainiacs").collection("users");
     const boardCollection = client.db("Brainiacs").collection("boards");
 
@@ -202,30 +198,27 @@ async function run() {
       }
     });
 
-// <<<<<<< HEAD
-//     app.delete("/boards/:id", async (req, res) => {
-//       const { id } = req.params;
-
-//       try {
-//         if (!ObjectId.isValid(id)) {
-//           return res.status(400).send({ error: "Invalid board ID" });
-//         }
-
-//         const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
-
-//         if (result.deletedCount === 0) {
-//           return res.status(404).send({ error: "Board not found" });
-//         }
-
-//         res.send({ message: "Board deleted successfully" });
-//       } catch (error) {
-//         res.status(500).send({ error: "Failed to delete board" });
-//       }
-//     });
+    app.delete("/boards/:id", async (req, res) => {
+      const { id } = req.params;
     
-// =======
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid board ID" });
+        }
+    
+        const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
+    
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.send({ message: "Board deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting board:", error);
+        res.status(500).send({ error: "Failed to delete board" });
+      }
+    });
 
-// >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
   } finally {
     // Ensure the client connection is properly closed if needed
   }
