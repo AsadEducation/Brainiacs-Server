@@ -79,15 +79,37 @@ async function run() {
 
       const token = authHeader.split(" ")[1]; // Extract the token
       try {
-        // Validate the token (if applicable, e.g., using Firebase Admin SDK or JWT)
-        // For now, assume the token is valid and fetch the user by email or ID
-        const email = req.query.email; // Optional: Use email if provided
+        const email = req.query.email; // Use email from query parameters
         if (!email) {
           return res.status(400).send({ error: "Email query parameter is required" });
         }
 
-        const user = await userCollection.findOne({ email });
+        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
+        const user = await userCollection.findOne({ email: email.trim() });
         if (!user) {
+          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
+          return res.status(404).send({ error: "User not found" });
+        }
+
+        res.send(user);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: "Failed to fetch user" });
+      }
+    });
+
+    app.get("/user/:email", async (req, res) => {
+      const { email } = req.params;
+
+      try {
+        if (!email) {
+          return res.status(400).send({ error: "Email parameter is required" });
+        }
+
+        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
+        const user = await userCollection.findOne({ email: email.trim() });
+        if (!user) {
+          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
           return res.status(404).send({ error: "User not found" });
         }
 
@@ -162,7 +184,7 @@ async function run() {
     });
 
     app.post("/boards", async (req, res) => {
-      const { name, visibility, theme, createdBy } = req.body;
+      const { name, description, visibility, theme, createdBy } = req.body; // Include description
 
       // Validation
       if (!name) {
@@ -180,6 +202,7 @@ async function run() {
 
         const newBoard = {
           name,
+          description: description || "", // Default to empty string if not provided
           visibility: visibility || "Public",
           theme: theme || "#3b82f6",
           createdBy,
