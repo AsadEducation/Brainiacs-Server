@@ -269,7 +269,7 @@ async function run() {
     app.post("/columns", async (req, res) => {
       console.log("hit the columns post api")
       const column = req.body;
-      const newColumns = { ...column, order: column.length }
+      const newColumns = { ...column }
       const result = await columnCollection.insertOne(newColumns);
       res.send(result);
     })
@@ -306,6 +306,13 @@ async function run() {
       const result = await columnCollection.updateOne(query, updateInfo);
       res.send(result)
 
+    })
+
+    app.delete("/columns",async(req,res)=>{
+      const columnId=req.query.id;
+      const result1=await taskCollection.deleteMany({columnId:columnId})
+      const result=await columnCollection.deleteOne({id:columnId});
+      res.send(result)
     })
 
 
