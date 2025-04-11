@@ -185,7 +185,7 @@ async function run() {
 
     app.post("/boards", async (req, res) => {
       const { name, description, visibility, theme, createdBy } = req.body; // Include description
-
+    
       // Validation
       if (!name) {
         return res.status(400).send({ error: "Board name is required" });
@@ -196,22 +196,35 @@ async function run() {
       if (!ObjectId.isValid(createdBy)) {
         return res.status(400).send({ error: "Invalid createdBy ID" });
       }
-
+    
       try {
         const createdAt = new Date().toISOString();
-
+    
+        // Fetch the creator's details from the users collection
+        const creator = await userCollection.findOne({ _id: new ObjectId(createdBy) });
+        if (!creator) {
+          return res.status(404).send({ error: "Creator not found" });
+        }
+    
         const newBoard = {
           name,
           description: description || "", // Default to empty string if not provided
           visibility: visibility || "Public",
           theme: theme || "#3b82f6",
           createdBy,
-          members: [],
+          members: [
+            {
+              userId: createdBy,
+              name: creator.name,
+              email: creator.email,
+              role: "admin", // Set the creator as admin
+            },
+          ],
           createdAt,
         };
-
+    
         const result = await boardCollection.insertOne(newBoard);
-
+    
         res.status(201).send({
           ...newBoard,
           _id: result.insertedId,
@@ -259,6 +272,119 @@ async function run() {
         res.status(500).send({ error: "Failed to update board" });
       }
     });
+
+    app.put("/boards/:id/messages", async (req, res) => {
+      const { id } = req.params;
+      const { senderId, senderName, text, attachments } = req.body;
+    
+      // Validation
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
+      if (!senderId || !ObjectId.isValid(senderId)) {
+        return res.status(400).send({ error: "Invalid sender ID" });
+      }
+      if (!text) {
+        return res.status(400).send({ error: "Message text is required" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(id) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        const message = {
+          messageId: new ObjectId(), // Unique ID for the message
+          senderId,
+          senderName: senderName || "Unknown User", // Default to "Unknown User" if senderName is not provided
+          text,
+          attachments: attachments || [], // Default to an empty array if no attachments
+          timestamp: new Date().toISOString(),
+        };
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $push: { messages: message } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.send({ message: "Message added successfully", message });
+      } catch (error) {
+        console.error("Error adding message to board:", error);
+        res.status(500).send({ error: "Failed to add message to board" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { text } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          { $set: { "messages.$.text": text } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error editing message:", error);
+        res.status(500).send({ error: "Failed to edit message" });
+      }
+    });
+    
+    app.delete("/boards/:boardId/messages/:messageId", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { deletedBy, deletedAt } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $set: {
+              "messages.$.text": null,
+              "messages.$.deletedBy": deletedBy,
+              "messages.$.deletedAt": deletedAt,
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error deleting message:", error);
+        res.status(500).send({ error: "Failed to delete message" });
+      }
+    });
+    
 
      app.delete("/boards/:id", async (req, res) => {
       const { id } = req.params;
