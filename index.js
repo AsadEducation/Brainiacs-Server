@@ -37,9 +37,11 @@ async function run() {
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
 
+    
 
+// my Profile reward section
     app.get("/myProfile", async (req, res) => {
-      try {
+      
         const tasks = await taskCollection.find().toArray();
         const rewardData = await rewardCollection.find().toArray();
     
@@ -65,10 +67,7 @@ async function run() {
           progressToNext,
           badges: rewardData,
         });
-      } catch (err) {
-        console.error(err);
-        res.status(500).send({ error: "Failed to get profile summary" });
-      }
+      
     });
 
 
