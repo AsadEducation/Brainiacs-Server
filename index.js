@@ -150,38 +150,56 @@ async function run() {
 
     app.get("/boards/:id", async (req, res) => {
       const { id } = req.params;
-
+      const userId = req.query.userId; // Pass userId as a query parameter
+    
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ error: "Invalid board ID" });
         }
-
+    
         const board = await boardCollection.findOne({ _id: new ObjectId(id) });
-
+    
         if (!board) {
           return res.status(404).send({ error: "Board not found" });
         }
-
+    
+        // Ensure messages field exists and is an array
+        const messages = board.messages || [];
+    
         // Populate member details
         const memberDetails = await userCollection
           .find({ _id: { $in: board.members.map((member) => new ObjectId(member.userId)) } })
           .toArray();
-
+    
         const populatedMembers = board.members.map((member) => {
           const user = memberDetails.find((user) => user._id.toString() === member.userId);
           return {
             ...member,
             name: user?.name || "Unknown",
             email: user?.email || "Unknown",
-            role: member.role || "member", // Ensure role is preserved
+            role: member.role || "member",
           };
         });
-
-        res.send({ ...board, members: populatedMembers });
+    
+        // Calculate unseen messages
+        const unseenCount = messages.filter(
+          (msg) => !msg.seenBy?.includes(userId)
+        ).length;
+    
+        // Get the last message
+        const lastMessage = messages[messages.length - 1] || null;
+    
+        res.send({
+          ...board,
+          members: populatedMembers,
+          unseenCount,
+          lastMessage,
+        });
       } catch (error) {
         res.status(500).send({ error: "Failed to fetch board" });
       }
     });
+    
 
     app.post("/boards", async (req, res) => {
       const { name, description, visibility, theme, createdBy } = req.body; // Include description
@@ -385,7 +403,145 @@ async function run() {
       }
     });
     
+    app.patch("/boards/:boardId/messages/:messageId/seen", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { seenBy } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          { $addToSet: { "messages.$.seenBy": seenBy } } // Add user to seenBy array
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error marking message as seen:", error);
+        res.status(500).send({ error: "Failed to mark message as seen" });
+      }
+    });
 
+    app.patch("/boards/:boardId/messages/:messageId/react", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { userId, reaction } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        // Remove any existing reaction by the user
+        const unsetReactions = {};
+        ["👍", "❤️", "😂", "😮", "😢", "😡"].forEach((r) => {
+          unsetReactions[`messages.$.reactions.${r}`] = userId;
+        });
+    
+        await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          { $pull: unsetReactions }
+        );
+    
+        // Add the new reaction
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          { $addToSet: { [`messages.$.reactions.${reaction}`]: userId } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error adding reaction:", error);
+        res.status(500).send({ error: "Failed to add reaction" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId/pin", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { pinnedBy, pinDuration } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const pinExpiry = new Date();
+        pinExpiry.setDate(pinExpiry.getDate() + pinDuration);
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $set: {
+              "messages.$.pinnedBy": pinnedBy,
+              "messages.$.pinExpiry": pinExpiry.toISOString(),
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error pinning message:", error);
+        res.status(500).send({ error: "Failed to pin message" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId/unpin", async (req, res) => {
+      const { boardId, messageId } = req.params;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $unset: {
+              "messages.$.pinnedBy": "",
+              "messages.$.pinExpiry": "",
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        res.send({ message: "Message unpinned successfully" });
+      } catch (error) {
+        console.error("Error unpinning message:", error);
+        res.status(500).send({ error: "Failed to unpin message" });
+      }
+    });
+    
      app.delete("/boards/:id", async (req, res) => {
       const { id } = req.params;
     
