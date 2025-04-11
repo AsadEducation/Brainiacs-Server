@@ -411,10 +411,14 @@ async function run() {
         return res.status(400).send({ error: "Invalid board or message ID" });
       }
     
+      if (!seenBy || !ObjectId.isValid(seenBy)) {
+        return res.status(400).send({ error: "Invalid seenBy user ID" });
+      }
+    
       try {
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
-          { $addToSet: { "messages.$.seenBy": seenBy } } // Add user to seenBy array
+          { $addToSet: { "messages.$.seenBy": seenBy } } // Ensure unique user IDs in seenBy array
         );
     
         if (result.matchedCount === 0) {
@@ -650,8 +654,76 @@ async function run() {
 
     })
 
-
-    // >>>>>>> 9d5ac285497d18596787dd97c26bf8e7ddf5a3e6
+    app.post("/boards/:boardId/polls", async (req, res) => {
+      const { boardId } = req.params;
+      const { question, options, createdBy } = req.body;
+    
+      if (!ObjectId.isValid(boardId)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
+    
+      try {
+        const poll = {
+          _id: new ObjectId(),
+          question,
+          options,
+          createdBy,
+          createdAt: new Date().toISOString(),
+        };
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId) },
+          { $push: { polls: poll } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.status(201).send(poll);
+      } catch (error) {
+        console.error("Error creating poll:", error);
+        res.status(500).send({ error: "Failed to create poll" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/polls/:pollId/vote", async (req, res) => {
+      const { boardId, pollId } = req.params;
+      const { userId, optionIndex } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
+        return res.status(400).send({ error: "Invalid board or poll ID" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        const poll = board.polls.find((p) => p._id.toString() === pollId);
+        if (!poll) {
+          return res.status(404).send({ error: "Poll not found" });
+        }
+    
+        if (poll.options[optionIndex].votes.includes(userId)) {
+          return res.status(400).send({ error: "User has already voted" });
+        }
+    
+        poll.options[optionIndex].votes.push(userId);
+    
+        await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
+          { $set: { "polls.$": poll } }
+        );
+    
+        res.send(poll);
+      } catch (error) {
+        console.error("Error voting on poll:", error);
+        res.status(500).send({ error: "Failed to vote on poll" });
+      }
+    });
+    
   } finally {
     // Ensure the client connection is properly closed if needed
   }
