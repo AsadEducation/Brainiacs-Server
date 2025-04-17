@@ -39,7 +39,6 @@ async function run() {
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
 
-    
 
 // my Profile reward section
     app.get("/myProfile", async (req, res) => {
@@ -71,7 +70,6 @@ async function run() {
         });
       
     });
-
 
 
 
