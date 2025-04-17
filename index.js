@@ -71,6 +71,8 @@ app.get("/myProfile", async (req, res) => {
 
 
 
+    //user collection is empty now
+    // user related api 
     app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
