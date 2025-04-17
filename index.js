@@ -29,8 +29,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-
 
     const database = client.db("Brainiacs");
     const userCollection = client.db("Brainiacs").collection("users");
@@ -41,35 +39,35 @@ async function run() {
 
 
 // my Profile reward section
-    app.get("/myProfile", async (req, res) => {
+app.get("/myProfile", async (req, res) => {
       
-        const tasks = await taskCollection.find().toArray();
-        const rewardData = await rewardCollection.find().toArray();
-    
-        const completedTasks = tasks.filter((t) => t.columnTittle === "done");
-        const completedCount = completedTasks.length;
-        const points = completedCount * 10;
-    
-        const unlockedBadges = rewardData.filter((b) => points >= b.pointsRequired);
-        const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
-    
-        const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
-        const nextBadge = lockedBadges[0] || null;
-    
-        const progressToNext = nextBadge
-          ? Math.floor((points / nextBadge.pointsRequired) * 100)
-          : 100;
-    
-        res.send({
-          points,
-          completedCount,
-          currentBadge,
-          nextBadge,
-          progressToNext,
-          badges: rewardData,
-        });
-      
-    });
+  const tasks = await taskCollection.find().toArray();
+  const rewardData = await rewardCollection.find().toArray();
+
+  const completedTasks = tasks.filter((t) => t.columnTittle === "done");
+  const completedCount = completedTasks.length;
+  const points = completedCount * 10;
+
+  const unlockedBadges = rewardData.filter((b) => points >= b.pointsRequired);
+  const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
+
+  const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
+  const nextBadge = lockedBadges[0] || null;
+
+  const progressToNext = nextBadge
+    ? Math.floor((points / nextBadge.pointsRequired) * 100)
+    : 100;
+
+  res.send({
+    points,
+    completedCount,
+    currentBadge,
+    nextBadge,
+    progressToNext,
+    badges: rewardData,
+  });
+
+});
 
 
 
@@ -78,33 +76,84 @@ async function run() {
     app.get("/users", async (req, res) => {
       const cursor = userCollection.find();
       const result = await cursor.toArray();
-      console.log(result);
       res.send(result);
     });
 
-
-    
     app.post("/users", async (req, res) => {
       const newUser = req.body;
-      if (!newUser.role) {
-        newUser.role = "user";
+
+      // Validation
+      if (!newUser.name || !newUser.email) {
+        return res.status(400).send({ error: "User name and email are required" });
       }
-      console.log("New User Data:", newUser);
-      const result = await userCollection.insertOne(newUser);
-      res.send(result);
+
+      try {
+        // Check if the user already exists
+        const existingUser = await userCollection.findOne({ email: newUser.email });
+        if (existingUser) {
+          return res.status(400).send({ error: "User already exists" });
+        }
+
+        // Set default role if not provided
+        if (!newUser.role) {
+          newUser.role = "user";
+        }
+
+        const result = await userCollection.insertOne(newUser);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error saving user:", error);
+        res.status(500).send({ error: "Failed to save user" });
+      }
     });
 
     app.get("/user", async (req, res) => {
-      const email = req.query.email;
-      if (!email) {
-        return res.status(400).send({ error: "Email query parameter is required" });
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(400).send({ error: "Authorization token is required" });
       }
-      const user = await userCollection.findOne({ email });
-      if (user) {
-        console.log("Fetched User:", user);
+
+      const token = authHeader.split(" ")[1]; // Extract the token
+      try {
+        const email = req.query.email; // Use email from query parameters
+        if (!email) {
+          return res.status(400).send({ error: "Email query parameter is required" });
+        }
+
+        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
+        const user = await userCollection.findOne({ email: email.trim() });
+        if (!user) {
+          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
+          return res.status(404).send({ error: "User not found" });
+        }
+
         res.send(user);
-      } else {
-        res.status(404).send({ error: "User not found" });
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: "Failed to fetch user" });
+      }
+    });
+
+    app.get("/user/:email", async (req, res) => {
+      const { email } = req.params;
+
+      try {
+        if (!email) {
+          return res.status(400).send({ error: "Email parameter is required" });
+        }
+
+        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
+        const user = await userCollection.findOne({ email: email.trim() });
+        if (!user) {
+          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
+          return res.status(404).send({ error: "User not found" });
+        }
+
+        res.send(user);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: "Failed to fetch user" });
       }
     });
 
@@ -123,7 +172,6 @@ async function run() {
           .toArray();
         res.send(users);
       } catch (error) {
-        console.error("Error searching users:", error);
         res.status(500).send({ error: "Failed to search users" });
       }
     });
@@ -133,42 +181,121 @@ async function run() {
         const boards = await boardCollection.find().toArray();
         res.send(boards);
       } catch (error) {
-        console.error("Error fetching boards:", error);
         res.status(500).send({ error: "Failed to fetch boards" });
       }
     });
 
     app.get("/boards/:id", async (req, res) => {
       const { id } = req.params;
-
+      const userId = req.query.userId; // Pass userId as a query parameter
+    
       try {
         if (!ObjectId.isValid(id)) {
-          return res.status(400).send({ error: "Invalid board ID" });
+          return res.status(400).json({ error: "Invalid board ID" });
         }
-
+    
         const board = await boardCollection.findOne({ _id: new ObjectId(id) });
-
+    
         if (!board) {
-          return res.status(404).send({ error: "Board not found" });
+          return res.status(404).json({ error: "Board not found" });
         }
-
-        res.send(board);
+    
+        // Ensure messages field exists and is an array
+        const messages = board.messages || [];
+    
+        // Filter out expired pinned messages
+        const currentTime = new Date();
+        const validPinnedMessages = messages.filter(
+          (msg) => msg.pinnedBy && new Date(msg.pinExpiry) > currentTime
+        );
+    
+        // Populate member details
+        const memberDetails = await userCollection
+          .find({ _id: { $in: board.members.map((member) => new ObjectId(member.userId)) } })
+          .toArray();
+    
+        const populatedMembers = board.members.map((member) => {
+          const user = memberDetails.find((user) => user._id.toString() === member.userId);
+          return {
+            ...member,
+            name: user?.name || "Unknown",
+            email: user?.email || "Unknown",
+            role: member.role || "member",
+          };
+        });
+    
+        // Calculate unseen messages
+        const unseenCount = messages.filter(
+          (msg) => !msg.seenBy?.includes(userId)
+        ).length;
+    
+        // Get the last message
+        const lastMessage = messages[messages.length - 1] || null;
+    
+        res.json({
+          ...board,
+          members: populatedMembers,
+          unseenCount,
+          lastMessage,
+          polls: board.polls || [], // Include polls in the response
+          pinnedMessages: validPinnedMessages.map((msg) => ({
+            ...msg,
+            pinExpiry: msg.pinExpiry, // Include pinExpiry in the response
+          })),
+        });
       } catch (error) {
         console.error("Error fetching board:", error);
-        res.status(500).send({ error: "Failed to fetch board" });
+        res.status(500).json({ error: "Failed to fetch board" });
       }
     });
+    
 
     app.post("/boards", async (req, res) => {
-      const { name, visibility, theme, creator, members } = req.body;
-      if (!name || !visibility || !creator) {
-        return res.status(400).send({ error: "Board name, visibility, and creator are required" });
+      const { name, description, visibility, theme, createdBy } = req.body; // Include description
+    
+      // Validation
+      if (!name) {
+        return res.status(400).send({ error: "Board name is required" });
       }
-
+      if (!createdBy) {
+        return res.status(400).send({ error: "createdBy is required" });
+      }
+      if (!ObjectId.isValid(createdBy)) {
+        return res.status(400).send({ error: "Invalid createdBy ID" });
+      }
+    
       try {
-        const newBoard = { name, visibility, theme, creator, members: members || [] };
+        const createdAt = new Date().toISOString();
+    
+        // Fetch the creator's details from the users collection
+        const creator = await userCollection.findOne({ _id: new ObjectId(createdBy) });
+        if (!creator) {
+          return res.status(404).send({ error: "Creator not found" });
+        }
+    
+        const newBoard = {
+          name,
+          description: description || "", // Default to empty string if not provided
+          visibility: visibility || "Public",
+          theme: theme || "#3b82f6",
+          createdBy,
+          members: [
+            {
+              userId: createdBy,
+              name: creator.name,
+              email: creator.email,
+              role: "admin", // Set the creator as admin
+            },
+          ],
+          createdAt,
+        };
+    
         const result = await boardCollection.insertOne(newBoard);
-        res.send({ ...newBoard, id: result.insertedId });
+    
+        res.status(201).send({
+          ...newBoard,
+          _id: result.insertedId,
+        });
       } catch (error) {
         console.error("Error creating board:", error);
         res.status(500).send({ error: "Failed to create board" });
@@ -177,20 +304,29 @@ async function run() {
 
     app.put("/boards/:id", async (req, res) => {
       const { id } = req.params;
-      const updatedBoard = req.body;
-
-      if (!updatedBoard.name || !updatedBoard.visibility) {
-        return res.status(400).send({ error: "Board name and visibility are required" });
-      }
+      const { members } = req.body;
 
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ error: "Invalid board ID" });
         }
 
+        if (members) {
+          if (!Array.isArray(members)) {
+            return res.status(400).send({ error: "Members must be an array" });
+          }
+
+          // Validate each member's data
+          for (const member of members) {
+            if (!member.userId || !ObjectId.isValid(member.userId)) {
+              return res.status(400).send({ error: `Invalid userId: ${member.userId}` });
+            }
+          }
+        }
+
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: updatedBoard }
+          { $set: { members } }
         );
 
         if (result.matchedCount === 0) {
@@ -204,10 +340,293 @@ async function run() {
       }
     });
 
-    // Removed DELETE /boards/:id endpoint
+    app.put("/boards/:id/messages", async (req, res) => {
+      const { id } = req.params;
+      const { senderId, senderName, text, attachments } = req.body;
+    
+      // Validation
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
+      if (!senderId || !ObjectId.isValid(senderId)) {
+        return res.status(400).send({ error: "Invalid sender ID" });
+      }
+      if (!text) {
+        return res.status(400).send({ error: "Message text is required" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(id) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        const message = {
+          messageId: new ObjectId(), // Unique ID for the message
+          senderId,
+          senderName: senderName || "Unknown User", // Default to "Unknown User" if senderName is not provided
+          text,
+          attachments: attachments || [], // Default to an empty array if no attachments
+          timestamp: new Date().toISOString(),
+        };
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $push: { messages: message } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.send({ message: "Message added successfully", message });
+      } catch (error) {
+        console.error("Error adding message to board:", error);
+        res.status(500).send({ error: "Failed to add message to board" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { text } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) }, // Convert messageId to ObjectId
+          { $set: { "messages.$.text": text } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error editing message:", error);
+        res.status(500).send({ error: "Failed to edit message" });
+      }
+    });
+    
+    app.delete("/boards/:boardId/messages/:messageId", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { deletedBy, deletedAt } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $set: {
+              "messages.$.text": null,
+              "messages.$.deletedBy": deletedBy,
+              "messages.$.deletedAt": deletedAt,
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error deleting message:", error);
+        res.status(500).send({ error: "Failed to delete message" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId/seen", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { seenBy } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      if (!seenBy || !ObjectId.isValid(seenBy)) {
+        return res.status(400).send({ error: "Invalid seenBy user ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          { $addToSet: { "messages.$.seenBy": seenBy } } // Ensure unique user IDs in seenBy array
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error marking message as seen:", error);
+        res.status(500).send({ error: "Failed to mark message as seen" });
+      }
+    });
 
-
-
+    app.patch("/boards/:boardId/messages/:messageId/react", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { userId, reaction } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        const message = board.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+        if (!message) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        // Ensure the reactions object is initialized
+        if (!message.reactions) {
+          message.reactions = {};
+        }
+    
+        const userHasReacted = message.reactions[reaction]?.includes(userId);
+    
+        if (userHasReacted) {
+          // Remove the user's reaction
+          await boardCollection.updateOne(
+            { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+            { $pull: { [`messages.$.reactions.${reaction}`]: userId } }
+          );
+        } else {
+          // Add the user's reaction
+          await boardCollection.updateOne(
+            { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+            { $addToSet: { [`messages.$.reactions.${reaction}`]: userId } }
+          );
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error updating reaction:", error);
+        res.status(500).send({ error: "Failed to update reaction" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId/pin", async (req, res) => {
+      const { boardId, messageId } = req.params;
+      const { pinnedBy, pinDuration } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const pinExpiry = new Date();
+        pinExpiry.setDate(pinExpiry.getDate() + pinDuration);
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $set: {
+              "messages.$.pinnedBy": pinnedBy,
+              "messages.$.pinExpiry": pinExpiry.toISOString(),
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        const updatedBoard = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const updatedMessage = updatedBoard.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+    
+        res.send(updatedMessage);
+      } catch (error) {
+        console.error("Error pinning message:", error);
+        res.status(500).send({ error: "Failed to pin message" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/messages/:messageId/unpin", async (req, res) => {
+      const { boardId, messageId } = req.params;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(messageId)) {
+        return res.status(400).send({ error: "Invalid board or message ID" });
+      }
+    
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "messages.messageId": new ObjectId(messageId) },
+          {
+            $unset: {
+              "messages.$.pinnedBy": "",
+              "messages.$.pinExpiry": "",
+            },
+          }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+    
+        res.send({ message: "Message unpinned successfully" });
+      } catch (error) {
+        console.error("Error unpinning message:", error);
+        res.status(500).send({ error: "Failed to unpin message" });
+      }
+    });
+    
+     app.delete("/boards/:id", async (req, res) => {
+      const { id } = req.params;
+    
+      try {
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ error: "Invalid board ID" });
+        }
+    
+        const result = await boardCollection.deleteOne({ _id: new ObjectId(id) });
+    
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.send({ message: "Board deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting board:", error);
+        res.status(500).send({ error: "Failed to delete board" });
+      }
+    });
 
     // task management board
 
@@ -220,7 +639,7 @@ async function run() {
     app.post("/columns", async (req, res) => {
       console.log("hit the columns post api")
       const column = req.body;
-      const newColumns = { ...column, order: column.length }
+      const newColumns = { ...column }
       const result = await columnCollection.insertOne(newColumns);
       res.send(result);
     })
@@ -242,6 +661,29 @@ async function run() {
       res.send({ message: "Tasks updated" });
 
     });
+
+    app.put("/columnName", async (req, res) => {
+      const { id, tittle } = req.body;
+      console.log("Column Name update")
+      const query = {
+        id: id
+      };
+      const updateInfo = {
+        $set: {
+          tittle: tittle
+        }
+      }
+      const result = await columnCollection.updateOne(query, updateInfo);
+      res.send(result)
+
+    })
+
+    app.delete("/columns",async(req,res)=>{
+      const columnId=req.query.id;
+      const result1=await taskCollection.deleteMany({columnId:columnId})
+      const result=await columnCollection.deleteOne({id:columnId});
+      res.send(result)
+    })
 
 
     // task related apis
@@ -273,6 +715,153 @@ async function run() {
 
     })
 
+    app.post("/boards/:boardId/polls", async (req, res) => {
+      const { boardId } = req.params;
+      const { question, options, createdBy } = req.body;
+    
+      if (!ObjectId.isValid(boardId)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        // Check if the user has already created a poll in the last 24 hours
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const recentPoll = board.polls?.find(
+          (poll) => poll.createdBy === createdBy && new Date(poll.createdAt) > oneDayAgo
+        );
+    
+        if (recentPoll) {
+          return res.status(400).send({ error: "You can only create one poll per day." });
+        }
+    
+        const poll = {
+          _id: new ObjectId(),
+          question,
+          options,
+          createdBy,
+          createdAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(), // Set expiration time to 24 hours
+          isActive: true,
+        };
+    
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId) },
+          { $push: { polls: poll } }
+        );
+    
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        res.status(201).send(poll);
+      } catch (error) {
+        console.error("Error creating poll:", error);
+        res.status(500).send({ error: "Failed to create poll" });
+      }
+    });
+    
+    app.get("/boards/:boardId/polls", async (req, res) => {
+      const { boardId } = req.params;
+    
+      if (!ObjectId.isValid(boardId)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        // Automatically deactivate expired polls
+        const now = new Date();
+        const updatedPolls = board.polls.map((poll) => {
+          if (new Date(poll.expiresAt) <= now) {
+            return { ...poll, isActive: false };
+          }
+          return poll;
+        });
+    
+        // Update the board with the deactivated polls
+        await boardCollection.updateOne(
+          { _id: new ObjectId(boardId) },
+          { $set: { polls: updatedPolls } }
+        );
+    
+        res.send(updatedPolls);
+      } catch (error) {
+        console.error("Error fetching polls:", error);
+        res.status(500).send({ error: "Failed to fetch polls" });
+      }
+    });
+    
+    app.patch("/boards/:boardId/polls/:pollId/vote", async (req, res) => {
+      const { boardId, pollId } = req.params;
+      const { userId, optionIndex } = req.body;
+    
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
+        return res.status(400).send({ error: "Invalid board or poll ID" });
+      }
+    
+      try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+    
+        const poll = board.polls.find((p) => p._id.toString() === pollId);
+        if (!poll) {
+          return res.status(404).send({ error: "Poll not found" });
+        }
+    
+        if (poll.options[optionIndex].votes.includes(userId)) {
+          return res.status(400).send({ error: "User has already voted" });
+        }
+    
+        poll.options[optionIndex].votes.push(userId);
+    
+        await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
+          { $set: { "polls.$": poll } }
+        );
+    
+        res.send(poll);
+      } catch (error) {
+        console.error("Error voting on poll:", error);
+        res.status(500).send({ error: "Failed to vote on poll" });
+      }
+    });
+    
+    app.delete("/boards/:boardId/polls/:pollId", async (req, res) => {
+      const { boardId, pollId } = req.params;
+
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
+        return res.status(400).send({ error: "Invalid board or poll ID" });
+      }
+
+      try {
+        const result = await boardCollection.updateOne(
+          { _id: new ObjectId(boardId) },
+          { $pull: { polls: { _id: new ObjectId(pollId) } } } // Remove the poll
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).send({ error: "Poll not found" });
+        }
+
+        res.send({ message: "Poll removed successfully" });
+      } catch (error) {
+        console.error("Error removing poll:", error);
+        res.status(500).send({ error: "Failed to remove poll" });
+      }
+    });
+    
   } finally {
     // Ensure the client connection is properly closed if needed
   }
