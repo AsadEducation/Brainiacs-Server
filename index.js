@@ -38,8 +38,44 @@ async function run() {
     const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
-
+    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
    
+    
+// my Profile reward section
+app.get("/myProfile", async (req, res) => {
+      
+  const tasks = await taskCollection.find().toArray();
+  const rewardData = await rewardCollection.find().toArray();
+      const completedTasks = tasks.filter((t) => t.columnTittle === "done");
+      const completedCount = completedTasks.length;
+      const points = completedCount * 10;
+
+      const unlockedBadges = rewardData.filter(
+        (b) => points >= b.pointsRequired
+      );
+      const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
+
+      const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
+      const nextBadge = lockedBadges[0] || null;
+
+      const progressToNext = nextBadge
+        ? Math.floor((points / nextBadge.pointsRequired) * 100)
+        : 100;
+
+      res.send({
+        points,
+        completedCount,
+        currentBadge,
+        nextBadge,
+        progressToNext,
+        badges: rewardData,
+      });
+    });
+
+
+
+
+    // leaderboard
     app.get('/leaderboard', async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
@@ -74,39 +110,6 @@ async function run() {
         console.error(error);
         res.status(500).send({ message: "Server Error" });
       }
-    });
-
-
-
-// my Profile reward section
-app.get("/myProfile", async (req, res) => {
-      
-  const tasks = await taskCollection.find().toArray();
-  const rewardData = await rewardCollection.find().toArray();
-      const completedTasks = tasks.filter((t) => t.columnTittle === "done");
-      const completedCount = completedTasks.length;
-      const points = completedCount * 10;
-
-      const unlockedBadges = rewardData.filter(
-        (b) => points >= b.pointsRequired
-      );
-      const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
-
-      const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
-      const nextBadge = lockedBadges[0] || null;
-
-      const progressToNext = nextBadge
-        ? Math.floor((points / nextBadge.pointsRequired) * 100)
-        : 100;
-
-      res.send({
-        points,
-        completedCount,
-        currentBadge,
-        nextBadge,
-        progressToNext,
-        badges: rewardData,
-      });
     });
 
     //user collection is empty now
