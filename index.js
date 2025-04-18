@@ -10,9 +10,10 @@ app.use(express.json());
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", // Allow frontend origin
-      "https://brainiacs-team-collaboration.vercel.app",
-      "https://testing-brainiacs.vercel.app",
+      "http://localhost:5173",
+      "https://brainiacs1.netlify.app",
+      //deploy link ta ekhane boshayen please 
+      //na hoy may error dite pare.
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], // Allow specific HTTP methods
     allowedHeaders: ["Content-Type", "Authorization"], // Allow specific headers
