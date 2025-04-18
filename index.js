@@ -38,6 +38,46 @@ async function run() {
     const rewardCollection = client.db("Brainiacs").collection("rewards");
 
 
+    app.get('/leaderboard', async (req, res) => {
+      try {
+        const users = await userCollection.find().toArray();
+        const tasks = await taskCollection.find({ columnTittle: "done" }).toArray();
+        const rewards = await rewardCollection.find().toArray();
+
+        // count points per user
+        const leaderboard = users.map(user => {
+          const completedTasks = tasks.filter(task => task.userEmail === user.email);
+          const points = completedTasks.length * 10;
+
+          // find the badge based on points
+          const earnedBadge = rewards
+            .filter(badge => points >= badge.pointsRequired)
+            .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
+
+          return {
+            name: user.name,
+            email: user.email,
+            avatar: user.photoURL,
+            points: points,
+            badge: earnedBadge ? earnedBadge.title : "No Badge",
+            badgeImage: earnedBadge ? earnedBadge.image : null,
+          };
+        });
+
+        // sort leaderboard
+        leaderboard.sort((a, b) => b.points - a.points);
+
+        res.send(leaderboard);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Server Error" });
+      }
+    });
+
+
+
+
+
 // my Profile reward section
 app.get("/myProfile", async (req, res) => {
       
