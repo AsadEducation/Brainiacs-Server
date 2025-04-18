@@ -17,6 +17,7 @@
     "express": "^4.21.2",
     "imagekit": "^6.0.0",
     "mongodb": "^6.14.2"
+
   },
   "devDependencies": {
     "nodemon": "^3.0.0"

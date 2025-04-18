@@ -69,6 +69,8 @@ async function run() {
       });
     });
 
+    //user collection is empty now
+    // user related api 
     app.get("/users", async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
