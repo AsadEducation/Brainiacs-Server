@@ -12,6 +12,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://brainiacs1.netlify.app",
+      "https://brainiacs-team-collaboration.vercel.app",
       //deploy link ta ekhane boshayen please 
       //na hoy may error dite pare.
     ],
