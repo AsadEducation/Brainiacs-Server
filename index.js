@@ -41,6 +41,8 @@ async function run() {
     const myProfileCollection = client.db("Brainiacs").collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
     const leaderboardCollection = client.db("Brainiacs").collection("leaderboard");
+   
+
 
 
     // completed task
@@ -151,47 +153,91 @@ async function run() {
     });
 
 
-
-
-
-    // leaderboard
+// leaderboard right code 
     app.get('/leaderboard', async (req, res) => {
+      try {
+        const leaderboard = await leaderboardCollection.find().sort({ points: -1 }).toArray();
+        res.send(leaderboard);
+      } catch (err) {
+        res.status(500).send({ message: 'Failed to load leaderboard' });
+      }
+    });
+    
+    
+    app.post('/leaderboard', async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-
-        // count points per user
+    
         const leaderboard = users.map(user => {
-        const userCompletedTasks = completedTasks.filter(task => task.email === user.email);
-        const points = userCompletedTasks.length * 10;
-
-
-          // find the badge based on points
-          const earnedBadge = rewards
-            .filter(badge => points >= badge.pointsRequired)
+          const userCompleted = completedTasks.filter(t => t.email === user.email);
+          const points = userCompleted.length * 10;
+          const badge = rewards
+            .filter(b => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
-
+    
           return {
             name: user.name,
             email: user.email,
             avatar: user.photoURL,
-            points: points,
-            badge: earnedBadge ? earnedBadge.title : "No Badge",
-            badgeImage: earnedBadge ? earnedBadge.image : null,
+            points,
+            badge: badge?.title || "No Badge",
+            badgeImage: badge?.image || null,
+            updatedAt: new Date()
           };
         });
-
-
-        leaderboard.sort((a, b) => b.points - a.points);
-
-        res.send(leaderboard);
-      } catch (error) {
-        console.error(error);
-        res.status(500).send({ message: "Server Error" });
+    
+        await leaderboardCollection.deleteMany({});   
+        await leaderboardCollection.insertMany(leaderboard); 
+    
+        res.send({ message: 'Leaderboard updated successfully' });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to update leaderboard' });
       }
-    });
+    });     
 
+
+
+
+    // leaderboard
+    // app.get('/leaderboard', async (req, res) => {
+    //   try {
+    //     const users = await userCollection.find().toArray();
+    //     const completedTasks = await completedTask.find().toArray();
+    //     const rewards = await rewardCollection.find().toArray();
+
+    //     // count points per user
+    //     const leaderboard = users.map(user => {
+    //     const userCompletedTasks = completedTasks.filter(task => task.email === user.email);
+    //     const points = userCompletedTasks.length * 10;
+
+
+    //       // find the badge based on points
+    //       const earnedBadge = rewards
+    //         .filter(badge => points >= badge.pointsRequired)
+    //         .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
+
+    //       return {
+    //         name: user.name,
+    //         email: user.email,
+    //         avatar: user.photoURL,
+    //         points: points,
+    //         badge: earnedBadge ? earnedBadge.title : "No Badge",
+    //         badgeImage: earnedBadge ? earnedBadge.image : null,
+    //       };
+    //     });
+
+
+    //     leaderboard.sort((a, b) => b.points - a.points);
+
+    //     res.send(leaderboard);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send({ message: "Server Error" });
+    //   }
+    // });
 
 
 
