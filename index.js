@@ -39,38 +39,117 @@ async function run() {
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
     const myProfileCollection = client.db("Brainiacs").collection("myProfile");
-   
-    
-// my Profile reward section
-app.get("/myProfile", async (req, res) => {
-      
-  const tasks = await taskCollection.find().toArray();
-  const rewardData = await rewardCollection.find().toArray();
-      const completedTasks = tasks.filter((t) => t.columnTittle === "done");
-      const completedCount = completedTasks.length;
-      const points = completedCount * 10;
+    const completedTask = client.db("Brainiacs").collection("completedTask");
+    const leaderboardCollection = client.db("Brainiacs").collection("leaderboard");
 
-      const unlockedBadges = rewardData.filter(
-        (b) => points >= b.pointsRequired
-      );
-      const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
 
-      const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
-      const nextBadge = lockedBadges[0] || null;
+    // completed task
+    app.get('/completedTask/:email', async (req, res) => {
+      const userEmail = req.params.email;
 
-      const progressToNext = nextBadge
-        ? Math.floor((points / nextBadge.pointsRequired) * 100)
-        : 100;
-
-      res.send({
-        points,
-        completedCount,
-        currentBadge,
-        nextBadge,
-        progressToNext,
-        badges: rewardData,
-      });
+      try {
+        const result = await completedTask.find({ email: userEmail }).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching completed tasks:", error);
+        res.status(500).send({ success: false, message: "Internal server error." });
+      }
     });
+
+    app.post('/completedTask', async (req, res) => {
+      const taskData = req.body;
+
+      try {
+        const result = await completedTask.insertOne(taskData);
+        res.send({ success: true, message: "Task marked as completed!", result });
+      } catch (error) {
+        console.error("Error inserting completed task:", error);
+        res.status(500).send({ success: false, message: "Internal server error." });
+      }
+    });
+
+
+
+
+
+    //my profile
+    app.get("/myProfile", async (req, res) => {
+      try {
+        const userEmail = req.query.email;
+        if (!userEmail) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const completedTask = client.db("Brainiacs").collection("completedTask");
+        const rewardCollection = client.db("Brainiacs").collection("rewards");
+        const myProfileCollection = client.db("Brainiacs").collection("myProfile");
+
+        // Step 1: Get this user's completed tasks
+        const userCompletedTasks = await completedTask.find({ email: userEmail }).toArray();
+        const completedCount = userCompletedTasks.length;
+        const points = completedCount * 10;
+
+        // Step 2: Get reward data
+        const rewardData = await rewardCollection.find().toArray();
+
+        // Step 3: Badge logic
+        const unlockedBadges = rewardData.filter((b) => points >= b.pointsRequired);
+        const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
+
+        const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
+        const nextBadge = lockedBadges[0] || null;
+
+        const progressToNext = nextBadge
+          ? Math.floor((points / nextBadge.pointsRequired) * 100)
+          : 100;
+
+        // Step 4: Prepare profile summary
+        const summary = {
+          email: userEmail,
+          points,
+          completedCount,
+          currentBadge,
+          nextBadge,
+          progressToNext,
+          badges: rewardData,
+        };
+
+        // Step 5: Save to DB
+        await myProfileCollection.updateOne(
+          { email: userEmail },
+          { $set: summary },
+          { upsert: true }
+        );
+
+        res.send(summary);
+      } catch (error) {
+        console.error("GET /myProfile error", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
+
+    app.post("/myProfile", async (req, res) => {
+      try {
+        const profileData = req.body;
+
+        if (!profileData?.email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const result = await myProfileCollection.updateOne(
+          { email: profileData.email },
+          { $set: profileData },
+          { upsert: true }
+        );
+
+        res.send({ message: "Profile saved", result });
+      } catch (error) {
+        console.error("POST /myProfile error", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
 
 
 
@@ -79,13 +158,14 @@ app.get("/myProfile", async (req, res) => {
     app.get('/leaderboard', async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
-        const tasks = await taskCollection.find({ columnTittle: "done" }).toArray();
+        const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
 
         // count points per user
         const leaderboard = users.map(user => {
-          const completedTasks = tasks.filter(task => task.userEmail === user.email);
-          const points = completedTasks.length * 10;
+        const userCompletedTasks = completedTasks.filter(task => task.email === user.email);
+        const points = userCompletedTasks.length * 10;
+
 
           // find the badge based on points
           const earnedBadge = rewards
@@ -102,7 +182,7 @@ app.get("/myProfile", async (req, res) => {
           };
         });
 
-        // sort leaderboard
+
         leaderboard.sort((a, b) => b.points - a.points);
 
         res.send(leaderboard);
@@ -111,6 +191,10 @@ app.get("/myProfile", async (req, res) => {
         res.status(500).send({ message: "Server Error" });
       }
     });
+
+
+
+
 
     //user collection is empty now
     // user related api 
