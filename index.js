@@ -1105,29 +1105,45 @@ async function run() {
       const { boardId, pollId } = req.params;
       const { userId, optionIndex } = req.body;
 
+      // Validate IDs
       if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
         return res.status(400).send({ error: "Invalid board or poll ID" });
       }
 
       try {
-        const board = await boardCollection.findOne({
-          _id: new ObjectId(boardId),
-        });
-        if (!board) {
-          return res.status(404).send({ error: "Board not found" });
-        }
+        // 1. Fetch the board and poll
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) return res.status(404).send({ error: "Board not found" });
 
         const poll = board.polls.find((p) => p._id.toString() === pollId);
-        if (!poll) {
-          return res.status(404).send({ error: "Poll not found" });
+        if (!poll) return res.status(404).send({ error: "Poll not found" });
+
+        // 2. Check if user already voted on the specific option
+        const hasVotedOnOption = poll.options[optionIndex].votes.some(
+          (vote) => vote.userId === userId
+        );
+        if (hasVotedOnOption) {
+          return res
+            .status(400)
+            .send({ error: "User already voted on this option" });
         }
 
-        if (poll.options[optionIndex].votes.includes(userId)) {
-          return res.status(400).send({ error: "User has already voted" });
-        }
+        // 3. Fetch user details from userCollection
+        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) return res.status(404).send({ error: "User not found" });
 
-        poll.options[optionIndex].votes.push(userId);
+        // 4. Add vote with user details
+        const voteData = {
+          userId,
+          name: user.name,
+          email: user.email,
+          photoURL: user.photoURL, // Include user's profile photo if available
+        };
 
+        // Add the vote to the specified option
+        poll.options[optionIndex].votes.push(voteData);
+
+        // 5. Update the poll in the database
         await boardCollection.updateOne(
           { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
           { $set: { "polls.$": poll } }
@@ -1136,7 +1152,7 @@ async function run() {
         res.send(poll);
       } catch (error) {
         console.error("Error voting on poll:", error);
-        res.status(500).send({ error: "Failed to vote on poll" });
+        res.status(500).send({ error: "Failed to process vote" });
       }
     });
 
@@ -1161,6 +1177,45 @@ async function run() {
       } catch (error) {
         console.error("Error removing poll:", error);
         res.status(500).send({ error: "Failed to remove poll" });
+      }
+    });
+
+    app.patch("/boards/:boardId/polls/:pollId/remove-vote", async (req, res) => {
+      const { boardId, pollId } = req.params;
+      const { userId, optionIndex } = req.body;
+
+      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
+        return res.status(400).send({ error: "Invalid board or poll ID" });
+      }
+
+      try {
+        // Fetch the board and poll
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) return res.status(404).send({ error: "Board not found" });
+
+        const poll = board.polls.find((p) => p._id.toString() === pollId);
+        if (!poll) return res.status(404).send({ error: "Poll not found" });
+
+        // Check if the user has voted on the specific option
+        const optionVotes = poll.options[optionIndex].votes;
+        const voteIndex = optionVotes.findIndex((vote) => vote.userId === userId);
+        if (voteIndex === -1) {
+          return res.status(400).send({ error: "User has not voted on this option" });
+        }
+
+        // Remove the user's vote
+        optionVotes.splice(voteIndex, 1);
+
+        // Update the poll in the database
+        await boardCollection.updateOne(
+          { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
+          { $set: { "polls.$": poll } }
+        );
+
+        res.send(poll);
+      } catch (error) {
+        console.error("Error removing vote from poll:", error);
+        res.status(500).send({ error: "Failed to remove vote from poll" });
       }
     });
   } finally {
