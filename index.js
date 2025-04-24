@@ -595,20 +595,25 @@ async function run() {
         console.error("Error updating board:", error);
         res.status(500).send({ error: "Failed to update board" });
       }
-    });
+  });
     app.put("/boards/:id/messages", async (req, res) => {
       const { id } = req.params;
-      const { senderId, senderName, text, attachments } = req.body;
+      const { senderId, senderName, role, text, attachments } = req.body;
+
+      // Log the incoming payload for debugging
+      console.log("Incoming message payload:", req.body);
 
       // Validation (updated)
       if (!ObjectId.isValid(id)) {
         return res.status(400).send({ error: "Invalid board ID" });
       }
-      if (!senderId || !ObjectId.isValid(senderId)) {
-        return res.status(400).send({ error: "Invalid sender ID" });
+      if (!senderId) {
+        return res.status(400).send({ error: "Sender ID is required" });
       }
-      // Allow empty text if attachments exist
-      if (!text?.trim() && !attachments?.length) {
+      if (!role || typeof role !== "string") {
+        return res.status(400).send({ error: "Role is required and must be a string" });
+      }
+      if (!text?.trim() && (!attachments || attachments.length === 0)) {
         return res.status(400).send({
           error: "Either text or attachment is required",
         });
@@ -622,9 +627,10 @@ async function run() {
 
         const message = {
           messageId: new ObjectId(), // Unique ID for the message
-          senderId,
-          senderName: senderName,
-          text,
+          senderId: ObjectId.isValid(senderId) ? new ObjectId(senderId) : senderId, // Convert to ObjectId if valid
+          senderName,
+          role,
+          text: text?.trim() || null,
           attachments: attachments || [], // Default to an empty array if no attachments
           timestamp: new Date().toISOString(),
         };
@@ -729,9 +735,12 @@ async function run() {
         return res.status(400).send({ error: "Invalid board or message ID" });
       }
 
-      if (!seenBy || !ObjectId.isValid(seenBy)) {
-        return res.status(400).send({ error: "Invalid seenBy user ID" });
+      if (!seenBy) {
+        return res.status(400).send({ error: "seenBy user ID is required" });
       }
+
+      // Validate seenBy as a valid ObjectId or string
+      const seenById = ObjectId.isValid(seenBy) ? new ObjectId(seenBy) : seenBy;
 
       try {
         const result = await boardCollection.updateOne(
@@ -739,7 +748,7 @@ async function run() {
             _id: new ObjectId(boardId),
             "messages.messageId": new ObjectId(messageId),
           },
-          { $addToSet: { "messages.$.seenBy": seenBy } } // Ensure unique user IDs in seenBy array
+          { $addToSet: { "messages.$.seenBy": seenById } } // Add seenBy as a string or ObjectId
         );
 
         if (result.matchedCount === 0) {
