@@ -277,20 +277,15 @@ async function run() {
       const newUser = req.body;
 
       // Validation
-      if (!newUser.displayName || !newUser.email) { // Use displayName instead of name
-        console.error("Invalid user data:", newUser);
-        return res
-          .status(400)
-          .send({ error: "User displayName and email are required" });
+      if (!newUser.displayName || !newUser.email || !newUser._id) {
+        return res.status(400).send({ error: "User _id, displayName, and email are required" });
       }
 
       try {
         // Check if the user already exists
-        const existingUser = await userCollection.findOne({
-          email: newUser.email,
-        });
+        const existingUser = await userCollection.findOne({ email: newUser.email.trim() });
         if (existingUser) {
-          return res.status(400).send({ error: "User already exists" });
+          return res.status(200).send({ message: "User already exists" }); // Return 200 with a message
         }
 
         // Save the user
