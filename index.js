@@ -38,9 +38,7 @@ async function run() {
     const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
-    const myProfileCollection = client
-      .db("Brainiacs")
-      .collection("myProfile");
+    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
     const leaderboardCollection = client
       .db("Brainiacs")
@@ -277,20 +275,19 @@ async function run() {
       const newUser = req.body;
 
       // Validation
-      if (!newUser.displayName || !newUser.email) { // Use displayName instead of name
-        console.error("Invalid user data:", newUser);
+      if (!newUser.displayName || !newUser.email || !newUser._id) {
         return res
           .status(400)
-          .send({ error: "User displayName and email are required" });
+          .send({ error: "User _id, displayName, and email are required" });
       }
 
       try {
         // Check if the user already exists
         const existingUser = await userCollection.findOne({
-          email: newUser.email,
+          email: newUser.email.trim(),
         });
         if (existingUser) {
-          return res.status(400).send({ error: "User already exists" });
+          return res.status(200).send({ message: "User already exists" }); // Return 200 with a message
         }
 
         // Save the user
@@ -418,6 +415,7 @@ async function run() {
 
     app.get("/boards/:id", async (req, res) => {
       const { id } = req.params;
+
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ error: "Invalid board ID" });
@@ -429,26 +427,33 @@ async function run() {
           return res.status(404).json({ error: "Board not found" });
         }
 
-        // Populate member details
-        const memberDetails = await userCollection
-          .find({
-            _id: {
-              $in: board.members.map((member) => new ObjectId(member.userId)),
-            },
-          })
-          .toArray();
+        // Validate and filter valid userIds
+        const validMemberIds = board.members
+          ?.map((member) =>
+            ObjectId.isValid(member.userId) ? new ObjectId(member.userId) : null
+          )
+          .filter((id) => id !== null);
 
-        const populatedMembers = board.members.map((member) => {
-          const user = memberDetails.find(
-            (user) => user._id.toString() === member.userId
-          );
-          return {
-            ...member,
-            name: user?.name || "Unknown",
-            email: user?.email || "Unknown",
-            role: member.role || "member",
-          };
-        });
+        // Populate member details if valid userIds exist
+        const memberDetails = validMemberIds.length
+          ? await userCollection
+              .find({ _id: { $in: validMemberIds } })
+              .toArray()
+          : [];
+
+        const populatedMembers =
+          board.members?.map((member) => {
+            const user = memberDetails.find(
+              (user) => user._id.toString() === member.userId
+            );
+            return {
+              ...member,
+              name: member?.displayName,
+              email: member?.email,
+              photoURL: member?.photoURL,
+              role: member.role || "member",
+            };
+          }) || [];
 
         res.json({
           ...board,
@@ -466,19 +471,21 @@ async function run() {
       if (!name) {
         return res.status(400).send({ error: "Board name is required" });
       }
-      if (!createdBy) {
-        return res.status(400).send({ error: "createdBy is required" });
-      }
-      if (!ObjectId.isValid(createdBy)) {
-        return res.status(400).send({ error: "Invalid createdBy ID" });
+
+      if (!createdBy || typeof createdBy !== "string") {
+        return res.status(400).send({
+          error: "Invalid User ID (createdBy)",
+          details: "Please provide a valid string for createdBy",
+        });
       }
 
       try {
-        const creator = await userCollection.findOne({
-          _id: new ObjectId(createdBy),
-        });
+        const creator = await userCollection.findOne({ _id: createdBy });
         if (!creator) {
-          return res.status(404).send({ error: "Creator not found" });
+          return res.status(404).send({
+            error: "Creator not found",
+            details: `No user found with ID: ${createdBy}`,
+          });
         }
 
         const newBoard = {
@@ -490,7 +497,7 @@ async function run() {
           members: [
             {
               userId: createdBy,
-              name: creator.name,
+              name: creator.displayName,
               email: creator.email,
               photoURL: creator.photoURL,
               role: "admin",
@@ -500,19 +507,12 @@ async function run() {
         };
 
         const result = await boardCollection.insertOne(newBoard);
-
-        const populatedBoard = {
-          ...newBoard,
-          _id: result.insertedId,
-        };
-
-        res.status(201).send(populatedBoard);
+        res.status(201).send(result);
       } catch (error) {
         console.error("Error creating board:", error);
         res.status(500).send({ error: "Failed to create board" });
       }
     });
-
     app.put("/boards/:id", async (req, res) => {
       const { id } = req.params;
       const { name, description, visibility, theme, members } = req.body;
@@ -529,22 +529,53 @@ async function run() {
         if (theme !== undefined) updateFields.theme = theme;
 
         if (members !== undefined) {
-          // Fetch user details for each member
-          const memberDetails = await Promise.all(
+          // Get current board to preserve existing members
+          const currentBoard = await boardCollection.findOne({
+            _id: new ObjectId(id),
+          });
+
+          const currentMembers = currentBoard?.members || [];
+
+          // Create a map of existing members for quick lookup
+          const existingMembersMap = new Map(
+            currentMembers.map((member) => [member.userId, member])
+          );
+
+          // Process new members
+          const newMembers = await Promise.all(
             members.map(async (member) => {
+              if (!ObjectId.isValid(member.userId)) {
+                console.warn(`Invalid userId: ${member.userId}`);
+                return null;
+              }
+
               const user = await userCollection.findOne({
                 _id: new ObjectId(member.userId),
               });
+
+              if (!user) return null;
+
               return {
                 userId: member.userId,
-                email: user?.email || "Unknown",
-                name: user?.name || "Unknown",
-                photoURL: user?.photoURL || "/default-avatar.png",
+                email: user.email,
+                photoURL: user.photoURL,
+                name: user.name || user.displayName,
                 role: member.role || "member",
               };
             })
           );
-          updateFields.members = memberDetails;
+
+          // Filter out nulls and merge with existing members
+          const validNewMembers = newMembers.filter((m) => m !== null);
+          const updatedMembers = [...currentMembers];
+
+          validNewMembers.forEach((newMember) => {
+            if (!existingMembersMap.has(newMember.userId)) {
+              updatedMembers.push(newMember);
+            }
+          });
+
+          updateFields.members = updatedMembers;
         }
 
         const result = await boardCollection.updateOne(
@@ -556,13 +587,15 @@ async function run() {
           return res.status(404).send({ error: "Board not found" });
         }
 
-        res.send({ message: "Board updated successfully" });
+        res.send({
+          message: "Board updated successfully",
+          updatedMembers: updateFields.members || [],
+        });
       } catch (error) {
         console.error("Error updating board:", error);
         res.status(500).send({ error: "Failed to update board" });
       }
     });
-
     app.put("/boards/:id/messages", async (req, res) => {
       const { id } = req.params;
       const { senderId, senderName, text, attachments } = req.body;
@@ -590,7 +623,7 @@ async function run() {
         const message = {
           messageId: new ObjectId(), // Unique ID for the message
           senderId,
-          senderName: senderName || "Unknown User", // Default to "Unknown User" if senderName is not provided
+          senderName: senderName,
           text,
           attachments: attachments || [], // Default to an empty array if no attachments
           timestamp: new Date().toISOString(),
@@ -1250,7 +1283,6 @@ run().catch(console.dir);
 app.get("/", (req, res) => {
   res.send(" Brainiacs Server is running in Brain");
 });
-
 
 app.listen(port, () => {
   console.log(`server is running properly at : ${port}`);
