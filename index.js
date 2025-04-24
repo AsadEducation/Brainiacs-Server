@@ -12,7 +12,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://brainiacs1.netlify.app",
-      //deploy link ta ekhane boshayen please 
+      //deploy link ta ekhane boshayen please
       //na hoy may error dite pare.
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], // Allow specific HTTP methods
@@ -38,15 +38,16 @@ async function run() {
     const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
-    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
+    const myProfileCollection = client
+      .db("Brainiacs")
+      .collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
-    const leaderboardCollection = client.db("Brainiacs").collection("leaderboard");
-   
-
-
+    const leaderboardCollection = client
+      .db("Brainiacs")
+      .collection("leaderboard");
 
     // completed task
-    app.get('/completedTask/:email', async (req, res) => {
+    app.get("/completedTask/:email", async (req, res) => {
       const userEmail = req.params.email;
 
       try {
@@ -54,25 +55,29 @@ async function run() {
         res.send(result);
       } catch (error) {
         console.error("Error fetching completed tasks:", error);
-        res.status(500).send({ success: false, message: "Internal server error." });
+        res
+          .status(500)
+          .send({ success: false, message: "Internal server error." });
       }
     });
 
-    app.post('/completedTask', async (req, res) => {
+    app.post("/completedTask", async (req, res) => {
       const taskData = req.body;
 
       try {
         const result = await completedTask.insertOne(taskData);
-        res.send({ success: true, message: "Task marked as completed!", result });
+        res.send({
+          success: true,
+          message: "Task marked as completed!",
+          result,
+        });
       } catch (error) {
         console.error("Error inserting completed task:", error);
-        res.status(500).send({ success: false, message: "Internal server error." });
+        res
+          .status(500)
+          .send({ success: false, message: "Internal server error." });
       }
     });
-
-
-
-
 
     //my profile
     app.get("/myProfile", async (req, res) => {
@@ -82,12 +87,18 @@ async function run() {
           return res.status(400).send({ message: "Email is required" });
         }
 
-        const completedTask = client.db("Brainiacs").collection("completedTask");
+        const completedTask = client
+          .db("Brainiacs")
+          .collection("completedTask");
         const rewardCollection = client.db("Brainiacs").collection("rewards");
-        const myProfileCollection = client.db("Brainiacs").collection("myProfile");
+        const myProfileCollection = client
+          .db("Brainiacs")
+          .collection("myProfile");
 
         // Step 1: Get this user's completed tasks
-        const userCompletedTasks = await completedTask.find({ email: userEmail }).toArray();
+        const userCompletedTasks = await completedTask
+          .find({ email: userEmail })
+          .toArray();
         const completedCount = userCompletedTasks.length;
         const points = completedCount * 10;
 
@@ -95,8 +106,12 @@ async function run() {
         const rewardData = await rewardCollection.find().toArray();
 
         // Step 3: Badge logic
-        const unlockedBadges = rewardData.filter((b) => points >= b.pointsRequired);
-        const lockedBadges = rewardData.filter((b) => points < b.pointsRequired);
+        const unlockedBadges = rewardData.filter(
+          (b) => points >= b.pointsRequired
+        );
+        const lockedBadges = rewardData.filter(
+          (b) => points < b.pointsRequired
+        );
 
         const currentBadge = unlockedBadges[unlockedBadges.length - 1] || null;
         const nextBadge = lockedBadges[0] || null;
@@ -130,7 +145,6 @@ async function run() {
       }
     });
 
-
     app.post("/myProfile", async (req, res) => {
       try {
         const profileData = req.body;
@@ -152,31 +166,34 @@ async function run() {
       }
     });
 
-
-// leaderboard right code 
-    app.get('/leaderboard', async (req, res) => {
+    // leaderboard right code
+    app.get("/leaderboard", async (req, res) => {
       try {
-        const leaderboard = await leaderboardCollection.find().sort({ points: -1 }).toArray();
+        const leaderboard = await leaderboardCollection
+          .find()
+          .sort({ points: -1 })
+          .toArray();
         res.send(leaderboard);
       } catch (err) {
-        res.status(500).send({ message: 'Failed to load leaderboard' });
+        res.status(500).send({ message: "Failed to load leaderboard" });
       }
     });
-    
-    
-    app.post('/leaderboard', async (req, res) => {
+
+    app.post("/leaderboard", async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-    
-        const leaderboard = users.map(user => {
-          const userCompleted = completedTasks.filter(t => t.email === user.email);
+
+        const leaderboard = users.map((user) => {
+          const userCompleted = completedTasks.filter(
+            (t) => t.email === user.email
+          );
           const points = userCompleted.length * 10;
           const badge = rewards
-            .filter(b => points >= b.pointsRequired)
+            .filter((b) => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
-    
+
           return {
             name: user.name,
             email: user.email,
@@ -184,22 +201,19 @@ async function run() {
             points,
             badge: badge?.title || "No Badge",
             badgeImage: badge?.image || null,
-            updatedAt: new Date()
+            updatedAt: new Date(),
           };
         });
-    
-        await leaderboardCollection.deleteMany({});   
-        await leaderboardCollection.insertMany(leaderboard); 
-    
-        res.send({ message: 'Leaderboard updated successfully' });
+
+        await leaderboardCollection.deleteMany({});
+        await leaderboardCollection.insertMany(leaderboard);
+
+        res.send({ message: "Leaderboard updated successfully" });
       } catch (err) {
         console.error(err);
-        res.status(500).send({ message: 'Failed to update leaderboard' });
+        res.status(500).send({ message: "Failed to update leaderboard" });
       }
-    });     
-
-
-
+    });
 
     // leaderboard
     // app.get('/leaderboard', async (req, res) => {
@@ -212,7 +226,6 @@ async function run() {
     //     const leaderboard = users.map(user => {
     //     const userCompletedTasks = completedTasks.filter(task => task.email === user.email);
     //     const points = userCompletedTasks.length * 10;
-
 
     //       // find the badge based on points
     //       const earnedBadge = rewards
@@ -229,7 +242,6 @@ async function run() {
     //       };
     //     });
 
-
     //     leaderboard.sort((a, b) => b.points - a.points);
 
     //     res.send(leaderboard);
@@ -239,11 +251,8 @@ async function run() {
     //   }
     // });
 
-
-
-
     //user collection is empty now
-    // user related api 
+    // user related api
     app.get("/users", async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
@@ -268,12 +277,11 @@ async function run() {
       const newUser = req.body;
 
       // Validation
-      if (!newUser.name || !newUser.email) {
-        // Ensure 'name' and 'email' are validated
-        console.error("Invalid user data:", newUser); // Log invalid data for debugging
+      if (!newUser.displayName || !newUser.email) { // Use displayName instead of name
+        console.error("Invalid user data:", newUser);
         return res
           .status(400)
-          .send({ error: "User name and email are required" });
+          .send({ error: "User displayName and email are required" });
       }
 
       try {
@@ -283,12 +291,6 @@ async function run() {
         });
         if (existingUser) {
           return res.status(400).send({ error: "User already exists" });
-        }
-
-        // Rename photo to photoURL before saving
-        if (newUser.photo) {
-          newUser.photoURL = newUser.photo;
-          delete newUser.photo;
         }
 
         // Save the user
@@ -311,7 +313,7 @@ async function run() {
 
       const token = authHeader.split(" ")[1]; // Extract the token
       try {
-        const email = req.query.email; // Use email from query parameters
+        const email = decodeURIComponent(req.query.email); // Decode the email
         if (!email) {
           return res
             .status(400)
@@ -347,10 +349,8 @@ async function run() {
           return res.status(400).send({ error: "Email parameter is required" });
         }
 
-        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
         const user = await userCollection.findOne({ email: email.trim() }); // Ensure trimmed email
         if (!user) {
-          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
           return res.status(404).send({ error: "User not found" });
         }
 
@@ -380,6 +380,33 @@ async function run() {
       }
     });
 
+    // Member search API
+    app.get("/members/search", async (req, res) => {
+      const { query } = req.query;
+
+      if (!query) {
+        return res.status(400).send({ error: "Query parameter is required" });
+      }
+
+      try {
+        const regex = new RegExp(query, "i"); // Case-insensitive search
+        const users = await userCollection
+          .find({
+            $or: [
+              { name: regex }, // Match name
+              { email: regex }, // Match email
+            ],
+          })
+          .limit(10) // Limit results to 10
+          .toArray();
+
+        res.send(users);
+      } catch (error) {
+        console.error("Error searching members:", error);
+        res.status(500).send({ error: "Failed to search members" });
+      }
+    });
+
     app.get("/boards", async (req, res) => {
       try {
         const boards = await boardCollection.find().toArray();
@@ -391,8 +418,6 @@ async function run() {
 
     app.get("/boards/:id", async (req, res) => {
       const { id } = req.params;
-      const userId = req.query.userId; // Pass userId as a query parameter
-
       try {
         if (!ObjectId.isValid(id)) {
           return res.status(400).json({ error: "Invalid board ID" });
@@ -403,15 +428,6 @@ async function run() {
         if (!board) {
           return res.status(404).json({ error: "Board not found" });
         }
-
-        // Ensure messages field exists and is an array
-        const messages = board.messages || [];
-
-        // Filter out expired pinned messages
-        const currentTime = new Date();
-        const validPinnedMessages = messages.filter(
-          (msg) => msg.pinnedBy && new Date(msg.pinExpiry) > currentTime
-        );
 
         // Populate member details
         const memberDetails = await userCollection
@@ -434,24 +450,9 @@ async function run() {
           };
         });
 
-        // Calculate unseen messages
-        const unseenCount = messages.filter(
-          (msg) => !msg.seenBy?.includes(userId)
-        ).length;
-
-        // Get the last message
-        const lastMessage = messages[messages.length - 1] || null;
-
         res.json({
           ...board,
           members: populatedMembers,
-          unseenCount,
-          lastMessage,
-          polls: board.polls || [], // Include polls in the response
-          pinnedMessages: validPinnedMessages.map((msg) => ({
-            ...msg,
-            pinExpiry: msg.pinExpiry, // Include pinExpiry in the response
-          })),
         });
       } catch (error) {
         console.error("Error fetching board:", error);
@@ -460,9 +461,8 @@ async function run() {
     });
 
     app.post("/boards", async (req, res) => {
-      const { name, description, visibility, theme, createdBy } = req.body; // Include description
+      const { name, description, visibility, theme, createdBy } = req.body;
 
-      // Validation
       if (!name) {
         return res.status(400).send({ error: "Board name is required" });
       }
@@ -474,9 +474,6 @@ async function run() {
       }
 
       try {
-        const createdAt = new Date().toISOString();
-
-        // Fetch the creator's details from the users collection
         const creator = await userCollection.findOne({
           _id: new ObjectId(createdBy),
         });
@@ -486,7 +483,7 @@ async function run() {
 
         const newBoard = {
           name,
-          description: description || "", // Default to empty string if not provided
+          description: description || "",
           visibility: visibility || "Public",
           theme: theme || "#3b82f6",
           createdBy,
@@ -495,18 +492,21 @@ async function run() {
               userId: createdBy,
               name: creator.name,
               email: creator.email,
-              role: "admin", // Set the creator as admin
+              photoURL: creator.photoURL,
+              role: "admin",
             },
           ],
-          createdAt,
+          createdAt: new Date().toISOString(),
         };
 
         const result = await boardCollection.insertOne(newBoard);
 
-        res.status(201).send({
+        const populatedBoard = {
           ...newBoard,
           _id: result.insertedId,
-        });
+        };
+
+        res.status(201).send(populatedBoard);
       } catch (error) {
         console.error("Error creating board:", error);
         res.status(500).send({ error: "Failed to create board" });
@@ -515,31 +515,41 @@ async function run() {
 
     app.put("/boards/:id", async (req, res) => {
       const { id } = req.params;
-      const { members } = req.body;
+      const { name, description, visibility, theme, members } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid board ID" });
+      }
 
       try {
-        if (!ObjectId.isValid(id)) {
-          return res.status(400).send({ error: "Invalid board ID" });
-        }
+        const updateFields = {};
+        if (name !== undefined) updateFields.name = name;
+        if (description !== undefined) updateFields.description = description;
+        if (visibility !== undefined) updateFields.visibility = visibility;
+        if (theme !== undefined) updateFields.theme = theme;
 
-        if (members) {
-          if (!Array.isArray(members)) {
-            return res.status(400).send({ error: "Members must be an array" });
-          }
-
-          // Validate each member's data
-          for (const member of members) {
-            if (!member.userId || !ObjectId.isValid(member.userId)) {
-              return res
-                .status(400)
-                .send({ error: `Invalid userId: ${member.userId}` });
-            }
-          }
+        if (members !== undefined) {
+          // Fetch user details for each member
+          const memberDetails = await Promise.all(
+            members.map(async (member) => {
+              const user = await userCollection.findOne({
+                _id: new ObjectId(member.userId),
+              });
+              return {
+                userId: member.userId,
+                email: user?.email || "Unknown",
+                name: user?.name || "Unknown",
+                photoURL: user?.photoURL || "/default-avatar.png",
+                role: member.role || "member",
+              };
+            })
+          );
+          updateFields.members = memberDetails;
         }
 
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { members } }
+          { $set: updateFields }
         );
 
         if (result.matchedCount === 0) {
@@ -1112,7 +1122,9 @@ async function run() {
 
       try {
         // 1. Fetch the board and poll
-        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        const board = await boardCollection.findOne({
+          _id: new ObjectId(boardId),
+        });
         if (!board) return res.status(404).send({ error: "Board not found" });
 
         const poll = board.polls.find((p) => p._id.toString() === pollId);
@@ -1129,7 +1141,9 @@ async function run() {
         }
 
         // 3. Fetch user details from userCollection
-        const user = await userCollection.findOne({ _id: new ObjectId(userId) });
+        const user = await userCollection.findOne({
+          _id: new ObjectId(userId),
+        });
         if (!user) return res.status(404).send({ error: "User not found" });
 
         // 4. Add vote with user details
@@ -1180,44 +1194,53 @@ async function run() {
       }
     });
 
-    app.patch("/boards/:boardId/polls/:pollId/remove-vote", async (req, res) => {
-      const { boardId, pollId } = req.params;
-      const { userId, optionIndex } = req.body;
+    app.patch(
+      "/boards/:boardId/polls/:pollId/remove-vote",
+      async (req, res) => {
+        const { boardId, pollId } = req.params;
+        const { userId, optionIndex } = req.body;
 
-      if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
-        return res.status(400).send({ error: "Invalid board or poll ID" });
-      }
-
-      try {
-        // Fetch the board and poll
-        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
-        if (!board) return res.status(404).send({ error: "Board not found" });
-
-        const poll = board.polls.find((p) => p._id.toString() === pollId);
-        if (!poll) return res.status(404).send({ error: "Poll not found" });
-
-        // Check if the user has voted on the specific option
-        const optionVotes = poll.options[optionIndex].votes;
-        const voteIndex = optionVotes.findIndex((vote) => vote.userId === userId);
-        if (voteIndex === -1) {
-          return res.status(400).send({ error: "User has not voted on this option" });
+        if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
+          return res.status(400).send({ error: "Invalid board or poll ID" });
         }
 
-        // Remove the user's vote
-        optionVotes.splice(voteIndex, 1);
+        try {
+          // Fetch the board and poll
+          const board = await boardCollection.findOne({
+            _id: new ObjectId(boardId),
+          });
+          if (!board) return res.status(404).send({ error: "Board not found" });
 
-        // Update the poll in the database
-        await boardCollection.updateOne(
-          { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
-          { $set: { "polls.$": poll } }
-        );
+          const poll = board.polls.find((p) => p._id.toString() === pollId);
+          if (!poll) return res.status(404).send({ error: "Poll not found" });
 
-        res.send(poll);
-      } catch (error) {
-        console.error("Error removing vote from poll:", error);
-        res.status(500).send({ error: "Failed to remove vote from poll" });
+          // Check if the user has voted on the specific option
+          const optionVotes = poll.options[optionIndex].votes;
+          const voteIndex = optionVotes.findIndex(
+            (vote) => vote.userId === userId
+          );
+          if (voteIndex === -1) {
+            return res
+              .status(400)
+              .send({ error: "User has not voted on this option" });
+          }
+
+          // Remove the user's vote
+          optionVotes.splice(voteIndex, 1);
+
+          // Update the poll in the database
+          await boardCollection.updateOne(
+            { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
+            { $set: { "polls.$": poll } }
+          );
+
+          res.send(poll);
+        } catch (error) {
+          console.error("Error removing vote from poll:", error);
+          res.status(500).send({ error: "Failed to remove vote from poll" });
+        }
       }
-    });
+    );
   } finally {
     // Ensure the client connection is properly closed if needed
   }
