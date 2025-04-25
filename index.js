@@ -1183,14 +1183,14 @@ async function run() {
         }
 
         // 3. Fetch user details from userCollection
-        const user = await userCollection.findOne({
-          _id: new ObjectId(userId),
-        });
+        const user = ObjectId.isValid(userId)
+          ? await userCollection.findOne({ _id: new ObjectId(userId) })
+          : await userCollection.findOne({ _id: userId }); // Handle string userId
         if (!user) return res.status(404).send({ error: "User not found" });
 
         // 4. Add vote with user details
         const voteData = {
-          userId,
+          userId, // Keep userId as a string
           name: user.name,
           email: user.email,
           photoURL: user.photoURL, // Include user's profile photo if available
