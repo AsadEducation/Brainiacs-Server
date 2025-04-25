@@ -12,6 +12,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://brainiacs1.netlify.app",
+      "https://brainiacs-team-collaboration.vercel.app",
       //deploy link ta ekhane boshayen please
       //na hoy may error dite pare.
     ],
@@ -33,7 +34,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const database = client.db("Brainiacs");
-    const userCollection = client.db("Brainiacs").collection("users");
+    const userCollection = database.collection("users");
     const columnCollection = database.collection("Columns");
     const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
@@ -1283,6 +1284,28 @@ async function run() {
         }
       }
     );
+
+    // activity related api
+
+    app.get("/activity", async (req, res) => {
+      const userEmail = req.query?.email; //console.log('activity email', userEmail);
+
+      let query = {};
+
+      if (userEmail && userEmail !== "undefined") {
+        query.userEmail;
+      }
+
+      const result = await activityCollection.find(query).toArray(); //console.log(result);
+
+      res.send(result);
+    });
+
+    app.post("/activity", async (req, res) => {
+      const activityObject = req?.body;
+      const result = await activityCollection.insertOne(activityObject);
+      res.send(result);
+    });
   } finally {
     // Ensure the client connection is properly closed if needed
   }
