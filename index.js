@@ -39,9 +39,7 @@ async function run() {
     const taskCollection = database.collection("Tasks");
     const boardCollection = client.db("Brainiacs").collection("boards");
     const rewardCollection = client.db("Brainiacs").collection("rewards");
-    const myProfileCollection = client
-      .db("Brainiacs")
-      .collection("myProfile");
+    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
     const leaderboardCollection = client
       .db("Brainiacs")
@@ -278,7 +276,8 @@ async function run() {
       const newUser = req.body;
 
       // Validation
-      if (!newUser.displayName || !newUser.email) { // Use displayName instead of name
+      if (!newUser.displayName || !newUser.email) {
+        // Use displayName instead of name
         console.error("Invalid user data:", newUser);
         return res
           .status(400)
@@ -1273,7 +1272,6 @@ run().catch(console.dir);
 app.get("/", (req, res) => {
   res.send(" Brainiacs Server is running in Brain");
 });
-
 
 app.listen(port, () => {
   console.log(`server is running properly at : ${port}`);
