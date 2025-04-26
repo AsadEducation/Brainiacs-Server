@@ -6,7 +6,8 @@ const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" })); // Increase JSON payload limit
+app.use(express.urlencoded({ limit: "10mb", extended: true })); // Increase URL-encoded payload limit
 app.use(
   cors({
     origin: [
@@ -44,6 +45,7 @@ async function run() {
     const leaderboardCollection = client
       .db("Brainiacs")
       .collection("leaderboard");
+    const activityCollection = client.db("Brainiacs").collection("activity");
 
     // completed task
     app.get("/completedTask/:email", async (req, res) => {
@@ -543,18 +545,22 @@ async function run() {
           );
 
           // Process new members
-          const newMembers = await Promise.all(
+          const processedNewMembers = await Promise.all(
             members.map(async (member) => {
-              if (!ObjectId.isValid(member.userId)) {
+              if (!member.userId) {
                 console.warn(`Invalid userId: ${member.userId}`);
                 return null;
               }
 
-              const user = await userCollection.findOne({
-                _id: new ObjectId(member.userId),
-              });
+              // Fetch user details from the database
+              const user = ObjectId.isValid(member.userId)
+                ? await userCollection.findOne({ _id: new ObjectId(member.userId) })
+                : await userCollection.findOne({ _id: member.userId }); // Handle non-ObjectId userId
 
-              if (!user) return null;
+              if (!user) {
+                console.warn(`User not found for userId: ${member.userId}`);
+                return null;
+              }
 
               return {
                 userId: member.userId,
@@ -567,7 +573,7 @@ async function run() {
           );
 
           // Filter out nulls and merge with existing members
-          const validNewMembers = newMembers.filter((m) => m !== null);
+          const validNewMembers = processedNewMembers.filter((m) => m !== null);
           const updatedMembers = [...currentMembers];
 
           validNewMembers.forEach((newMember) => {
@@ -1305,6 +1311,57 @@ async function run() {
       const activityObject = req?.body;
       const result = await activityCollection.insertOne(activityObject);
       res.send(result);
+    });
+
+    app.get("/boards/search", async (req, res) => {
+      const { query } = req.query;
+
+      if (!query) {
+        return res.status(400).send({ error: "Query parameter is required" });
+      }
+
+      try {
+        const regex = new RegExp(query, "i"); // Case-insensitive search
+        const boards = await boardCollection
+          .find({
+            $or: [
+              { name: regex }, // Match board name
+              { description: regex }, // Match board description
+            ],
+          })
+          .toArray();
+
+        res.send(boards);
+      } catch (error) {
+        console.error("Error searching boards:", error);
+        res.status(500).send({ error: "Failed to search boards" });
+      }
+    });
+
+    app.put("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const { displayName, photoURL, password } = req.body;
+
+      try {
+        const updateFields = {};
+        if (displayName) updateFields.displayName = displayName;
+        if (photoURL) updateFields.photoURL = photoURL;
+        if (password) updateFields.password = password; // Hash password if needed
+
+        const result = await userCollection.updateOne(
+          { email: email.trim() },
+          { $set: updateFields }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "User not found" });
+        }
+
+        res.send({ message: "User updated successfully" });
+      } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).send({ error: "Failed to update user" });
+      }
     });
   } finally {
     // Ensure the client connection is properly closed if needed
