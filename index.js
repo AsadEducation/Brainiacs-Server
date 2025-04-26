@@ -167,8 +167,10 @@ async function run() {
       }
     });
 
-    // leaderboard right code
-    app.get("/leaderboard", async (req, res) => {
+
+// leaderboard right code
+
+    app.get('/leaderboard', async (req, res) => {
       try {
         const leaderboard = await leaderboardCollection
           .find()
@@ -185,12 +187,12 @@ async function run() {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-
-        const leaderboard = users.map((user) => {
-          const userCompleted = completedTasks.filter(
-            (t) => t.email === user.email
-          );
+    
+        const leaderboard = users.map(user => {
+          const userCompleted = completedTasks.filter(task => task.email === user.email);
           const points = userCompleted.length * 10;
+    
+         
           const badge = rewards
             .filter((b) => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
@@ -199,24 +201,37 @@ async function run() {
             name: user.name,
             email: user.email,
             avatar: user.photoURL,
-            points,
+            points: points,
             badge: badge?.title || "No Badge",
             badgeImage: badge?.image || null,
             updatedAt: new Date(),
           };
         });
-
+    
+        // First clear the old leaderboard
         await leaderboardCollection.deleteMany({});
+    
+        // Then insert the new leaderboard
         await leaderboardCollection.insertMany(leaderboard);
-
-        res.send({ message: "Leaderboard updated successfully" });
+    
+        res.send({ message: 'Leaderboard updated successfully' });
       } catch (err) {
-        console.error(err);
-        res.status(500).send({ message: "Failed to update leaderboard" });
+        console.error("Error while updating leaderboard:", err);
+        res.status(500).send({ message: 'Failed to update leaderboard' });
       }
     });
+       
+
+
+    
+         
+
+
+
 
     // leaderboard
+
+
     // app.get('/leaderboard', async (req, res) => {
     //   try {
     //     const users = await userCollection.find().toArray();
@@ -251,6 +266,10 @@ async function run() {
     //     res.status(500).send({ message: "Server Error" });
     //   }
     // });
+
+
+
+
 
     //user collection is empty now
     // user related api
