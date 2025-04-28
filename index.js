@@ -4,6 +4,43 @@ require("dotenv").config();
 const port = process.env.PORT || 5000;
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:5173",
+      "https://brainiacs1.netlify.app",
+      "https://brainiacs-team-collaboration.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  },
+});
+// Maintain a mapping of connected users
+const connectedUsers = {};
+
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  // Listen for user identification
+  socket.on("identify", (userEmail) => {
+    connectedUsers[userEmail] = socket.id; // Map user email to socket ID
+    console.log(`User identified: ${userEmail} -> ${socket.id}`);
+  });
+
+  socket.on("disconnect", () => {
+    // Remove the disconnected user from the mapping
+    for (const email in connectedUsers) {
+      if (connectedUsers[email] === socket.id) {
+        delete connectedUsers[email];
+        console.log(`User disconnected: ${email}`);
+        break;
+      }
+    }
+  });
+});
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -44,6 +81,7 @@ async function run() {
       .db("Brainiacs")
       .collection("leaderboard");
     const activityCollection = client.db("Brainiacs").collection("activity");
+    const joinRequestCollection = database.collection("joinRequests"); // Collection for join requests
 
     app.get("/completedTask/:email", async (req, res) => {
       const userEmail = req.params.email;
@@ -1309,6 +1347,148 @@ async function run() {
         res.status(500).send({ error: "Failed to update user" });
       }
     });
+
+    // Endpoint to create a join request
+    // In your /join-requests endpoint
+    app.post("/join-requests", async (req, res) => {
+      const {
+        boardId,
+        senderId,
+        senderName,
+        senderPhotoURL,
+        receiverId,
+        receiverEmail,
+        boardName,
+      } = req.body;
+
+      try {
+        const joinRequest = {
+          boardId,
+          boardName,
+          senderId,
+          senderName,
+          senderPhotoURL,
+          receiverId,
+          receiverEmail,
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        };
+
+        // Save to database
+        const result = await joinRequestCollection.insertOne(joinRequest);
+        const savedRequest = { ...joinRequest, _id: result.insertedId };
+
+        // Emit to receiver
+        const receiverSocketId = connectedUsers[receiverEmail];
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("join-request-sent", {
+            receiverEmail,
+            joinRequest: savedRequest,
+          });
+          console.log(`Sent join request to ${receiverEmail}`);
+        } else {
+          console.log(
+            `Receiver ${receiverEmail} not connected, will see on next login`
+          );
+        }
+
+        res.status(201).send(savedRequest);
+      } catch (error) {
+        console.error("Error creating join request:", error);
+        res.status(500).send({ error: "Failed to create join request" });
+      }
+    });
+
+    // Endpoint to fetch join requests for the current user
+    app.get("/join-requests", async (req, res) => {
+      const { email } = req.query;
+
+      if (!email) {
+        return res
+          .status(400)
+          .send({ error: "Email query parameter is required" });
+      }
+
+      try {
+        // Fetch join requests where the receiver's email matches the provided email
+        const joinRequests = await joinRequestCollection
+          .find({ receiverEmail: email, status: "pending" })
+          .toArray();
+
+        res.send(joinRequests);
+      } catch (error) {
+        console.error("Error fetching join requests:", error);
+        res.status(500).send({ error: "Failed to fetch join requests" });
+      }
+    });
+
+    app.patch("/join-requests/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid join request ID" });
+      }
+
+      if (!status || !["accepted", "rejected"].includes(status)) {
+        return res.status(400).send({ error: "Invalid status value" });
+      }
+
+      try {
+        const joinRequest = await joinRequestCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!joinRequest) {
+          return res.status(404).send({ error: "Join request not found" });
+        }
+
+        // Update the join request status
+        await joinRequestCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (status === "accepted") {
+          // Add the user as a member to the board
+          const { boardId, receiverId, receiverEmail } = joinRequest;
+
+          const board = await boardCollection.findOne({
+            _id: new ObjectId(boardId),
+          });
+          if (!board) {
+            return res.status(404).send({ error: "Board not found" });
+          }
+
+          const isAlreadyMember = board.members.some(
+            (member) => member.userId === receiverId
+          );
+
+          if (!isAlreadyMember) {
+            const newMember = {
+              userId: receiverId,
+              email: receiverEmail,
+              name: joinRequest.senderName,
+              photoURL: joinRequest.senderPhotoURL,
+              role: "member",
+            };
+
+            await boardCollection.updateOne(
+              { _id: new ObjectId(boardId) },
+              { $push: { members: newMember } }
+            );
+          }
+        }
+
+        // Notify all connected clients about the updated join requests
+        io.emit("join-requests-updated");
+
+        res.send({ message: "Join request updated successfully" });
+      } catch (error) {
+        console.error("Error updating join request:", error);
+        res.status(500).send({ error: "Failed to update join request" });
+      }
+    });
   } finally {
   }
 }
@@ -1318,6 +1498,6 @@ app.get("/", (req, res) => {
   res.send(" Brainiacs Server is running in Brain");
 });
 
-app.listen(port, () => {
-  console.log(`server is running properly at : ${port}`);
+server.listen(port, () => {
+  console.log(`Server is running properly at: http://localhost:${port}`);
 });
