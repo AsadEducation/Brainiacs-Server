@@ -37,13 +37,12 @@ async function run() {
     const userCollection = database.collection("users");
     const columnCollection = database.collection("Columns");
     const taskCollection = database.collection("Tasks");
-    const boardCollection = client.db("Brainiacs").collection("boards");
-    const rewardCollection = client.db("Brainiacs").collection("rewards");
-    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
-    const completedTask = client.db("Brainiacs").collection("completedTask");
-    const leaderboardCollection = client
-      .db("Brainiacs")
-      .collection("leaderboard");
+    const boardCollection = database.collection("boards");
+    const rewardCollection = database.collection("rewards");
+    const myProfileCollection = database.collection("myProfile");
+    const activityCollection = database.collection("activity");
+    const completedTask = database.collection("completedTask");
+    const leaderboardCollection = database.collection("leaderboard");
 
     // completed task
     app.get("/completedTask/:email", async (req, res) => {
@@ -89,7 +88,7 @@ async function run() {
         const completedTask = client
           .db("Brainiacs")
           .collection("completedTask");
-        const rewardCollection = client.db("Brainiacs").collection("rewards");
+        const rewardCollection = database.collection("rewards");
         const myProfileCollection = client
           .db("Brainiacs")
           .collection("myProfile");
@@ -596,7 +595,7 @@ async function run() {
         console.error("Error updating board:", error);
         res.status(500).send({ error: "Failed to update board" });
       }
-  });
+    });
     app.put("/boards/:id/messages", async (req, res) => {
       const { id } = req.params;
       const { senderId, senderName, role, text, attachments } = req.body;
@@ -612,7 +611,9 @@ async function run() {
         return res.status(400).send({ error: "Sender ID is required" });
       }
       if (!role || typeof role !== "string") {
-        return res.status(400).send({ error: "Role is required and must be a string" });
+        return res
+          .status(400)
+          .send({ error: "Role is required and must be a string" });
       }
       if (!text?.trim() && (!attachments || attachments.length === 0)) {
         return res.status(400).send({
@@ -628,7 +629,9 @@ async function run() {
 
         const message = {
           messageId: new ObjectId(), // Unique ID for the message
-          senderId: ObjectId.isValid(senderId) ? new ObjectId(senderId) : senderId, // Convert to ObjectId if valid
+          senderId: ObjectId.isValid(senderId)
+            ? new ObjectId(senderId)
+            : senderId, // Convert to ObjectId if valid
           senderName,
           role,
           text: text?.trim() || null,
