@@ -1291,15 +1291,17 @@ async function run() {
     // activity related api
 
     app.get("/activity", async (req, res) => {
-      const userEmail = req.query?.email; //console.log('activity email', userEmail);
+      const email = req.query?.email; console.log('activity email', email);
 
       let query = {};
 
-      if (userEmail && userEmail !== "undefined") {
-        query.userEmail;
+      if (email && email !== "undefined") {
+        query.currentUser ={email}
       }
 
-      const result = await activityCollection.find(query).toArray(); //console.log(result);
+      else return;
+
+      const result = await activityCollection.find(query).toArray(); console.log(result);
 
       res.send(result);
     });
