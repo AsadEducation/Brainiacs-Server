@@ -241,37 +241,44 @@ app.put('/timeSchedules/:id', async (req, res) => {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-
+    
         const leaderboard = users.map((user) => {
           const userCompleted = completedTasks.filter(
             (t) => t.email === user.email
           );
           const points = userCompleted.length * 10;
+    
           const badge = rewards
             .filter((b) => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
-
+    
+          
+          const name = user.displayName || user.name || "Anonymous";
+    
+       
+          const avatar = user.photoURL || user.photo || "";
+    
           return {
-            name: user.name,
+            name,
             email: user.email,
-            avatar: user.photoURL,
+            avatar,
             points,
             badge: badge?.title || "No Badge",
             badgeImage: badge?.image || null,
             updatedAt: new Date(),
           };
         });
-
+    
         await leaderboardCollection.deleteMany({});
         await leaderboardCollection.insertMany(leaderboard);
-
+    
         res.send({ message: "Leaderboard updated successfully" });
       } catch (err) {
         console.error(err);
         res.status(500).send({ message: "Failed to update leaderboard" });
       }
     });
-
+    
 
 
 
