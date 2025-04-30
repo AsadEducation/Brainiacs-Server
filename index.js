@@ -1394,6 +1394,8 @@ app.put('/timeSchedules/:id', async (req, res) => {
         senderId,
         senderName,
         senderPhotoURL,
+        receiverName,
+        receiverPhotoURL,
         receiverId,
         receiverEmail,
         boardName,
@@ -1408,6 +1410,8 @@ app.put('/timeSchedules/:id', async (req, res) => {
           senderPhotoURL,
           receiverId,
           receiverEmail,
+          receiverName, // Correctly using receiverName
+          receiverPhotoURL, // Correctly using receiverPhotoURL
           status: "pending",
           createdAt: new Date().toISOString(),
         };
@@ -1506,8 +1510,8 @@ app.put('/timeSchedules/:id', async (req, res) => {
             const newMember = {
               userId: receiverId,
               email: receiverEmail,
-              name: joinRequest.senderName,
-              photoURL: joinRequest.senderPhotoURL,
+              name: joinRequest.receiverName,
+              photoURL: joinRequest.receiverPhotoURL,
               role: "member",
             };
 
