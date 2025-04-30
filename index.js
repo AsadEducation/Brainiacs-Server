@@ -1355,6 +1355,8 @@ async function run() {
         senderId,
         senderName,
         senderPhotoURL,
+        receiverName,
+        receiverPhotoURL,
         receiverId,
         receiverEmail,
         boardName,
@@ -1369,6 +1371,8 @@ async function run() {
           senderPhotoURL,
           receiverId,
           receiverEmail,
+          receiverName, // Correctly using receiverName
+          receiverPhotoURL, // Correctly using receiverPhotoURL
           status: "pending",
           createdAt: new Date().toISOString(),
         };
@@ -1467,8 +1471,8 @@ async function run() {
             const newMember = {
               userId: receiverId,
               email: receiverEmail,
-              name: joinRequest.senderName,
-              photoURL: joinRequest.senderPhotoURL,
+              name: joinRequest.receiverName,
+              photoURL: joinRequest.receiverPhotoURL,
               role: "member",
             };
 
