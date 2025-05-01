@@ -77,11 +77,39 @@ async function run() {
     const rewardCollection = client.db("Brainiacs").collection("rewards");
     const myProfileCollection = client.db("Brainiacs").collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
-    const leaderboardCollection = client
-      .db("Brainiacs")
-      .collection("leaderboard");
+    const leaderboardCollection = client.db("Brainiacs").collection("leaderboard");
     const activityCollection = client.db("Brainiacs").collection("activity");
-    const joinRequestCollection = database.collection("joinRequests"); // Collection for join requests
+    const timeSchedulesCollection = client.db("Brainiacs").collection("timeSchedules");
+    const joinRequestCollection = database.collection("joinRequests");
+
+
+    app.post('/timeSchedules', async (req, res) => {
+      const scheduleData = req.body;
+      const result = await timeSchedulesCollection.insertOne(scheduleData);
+      res.send(result);
+    });
+
+    app.get('/timeSchedules', async (req, res) => {
+      const schedules = await timeSchedulesCollection.find().toArray();
+        res.send(schedules);
+    });
+
+   
+app.put('/timeSchedules/:id', async (req, res) => {
+
+  const id = req.params.id;
+  const updatedData = req.body;
+
+    const result = await timeSchedulesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData }
+    );
+
+    res.send(result);
+   
+});
+
+
 
     app.get("/completedTask/:email", async (req, res) => {
       const userEmail = req.params.email;
@@ -112,6 +140,7 @@ async function run() {
           .send({ success: false, message: "Internal server error." });
       }
     });
+
 
     app.get("/myProfile", async (req, res) => {
       try {
@@ -194,6 +223,7 @@ async function run() {
       }
     });
 
+// leaderboard right code 
     app.get("/leaderboard", async (req, res) => {
       try {
         const leaderboard = await leaderboardCollection
@@ -211,82 +241,49 @@ async function run() {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-
+    
         const leaderboard = users.map((user) => {
           const userCompleted = completedTasks.filter(
             (t) => t.email === user.email
           );
           const points = userCompleted.length * 10;
+    
           const badge = rewards
             .filter((b) => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
-
+    
+          
+          const name = user.displayName || user.name || "Anonymous";
+    
+       
+          const avatar = user.photoURL || user.photo || "";
+    
           return {
-            name: user.name,
+            name,
             email: user.email,
-            avatar: user.photoURL,
+            avatar,
             points,
             badge: badge?.title || "No Badge",
             badgeImage: badge?.image || null,
             updatedAt: new Date(),
           };
         });
-
+    
         await leaderboardCollection.deleteMany({});
         await leaderboardCollection.insertMany(leaderboard);
-
+    
         res.send({ message: "Leaderboard updated successfully" });
       } catch (err) {
         console.error(err);
         res.status(500).send({ message: "Failed to update leaderboard" });
       }
     });
+    
 
-    app.get("/users", async (req, res) => {
-      try {
-        const users = await userCollection.find().toArray();
 
-        const transformedUsers = users.map((user) => {
-          if (user.photo) {
-            user.photoURL = user.photo;
-            delete user.photo;
-          }
-          return user;
-        });
 
-        res.send(transformedUsers);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).send({ error: "Failed to fetch users" });
-      }
-    });
-
-    app.post("/users", async (req, res) => {
-      const newUser = req.body;
-
-      if (!newUser.displayName || !newUser.email || !newUser._id) {
-        return res
-          .status(400)
-          .send({ error: "User _id, displayName, and email are required" });
-      }
-
-      try {
-        const existingUser = await userCollection.findOne({
-          email: newUser.email.trim(),
-        });
-        if (existingUser) {
-          return res.status(200).send({ message: "User already exists" });
-        }
-
-        const result = await userCollection.insertOne(newUser);
-        res.status(201).send(result);
-      } catch (error) {
-        console.error("Error saving user:", error);
-        res.status(500).send({ error: "Failed to save user" });
-      }
-    });
-
-    // leaderboard
+    // leaderboard backup code in case of the first code does not run
+    
     // app.get('/leaderboard', async (req, res) => {
     //   try {
     //     const users = await userCollection.find().toArray();
@@ -321,6 +318,55 @@ async function run() {
     //     res.status(500).send({ message: "Server Error" });
     //   }
     // });
+
+
+
+    app.get("/users", async (req, res) => {
+      try {
+        const users = await userCollection.find().toArray();
+
+        const transformedUsers = users.map((user) => {
+          if (user.photo) {
+            user.photoURL = user.photo;
+            delete user.photo;
+          }
+          return user;
+        });
+
+        res.send(transformedUsers);
+      } catch (error) {
+        console.error("Error fetching users:", error);
+        res.status(500).send({ error: "Failed to fetch users" });
+      }
+    });
+    
+
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+
+      if (!newUser.displayName || !newUser.email || !newUser._id) {
+        return res
+          .status(400)
+          .send({ error: "User _id, displayName, and email are required" });
+      }
+
+      try {
+        const existingUser = await userCollection.findOne({
+          email: newUser.email.trim(),
+        });
+        if (existingUser) {
+          return res.status(200).send({ message: "User already exists" });
+        }
+
+        const result = await userCollection.insertOne(newUser);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error saving user:", error);
+        res.status(500).send({ error: "Failed to save user" });
+      }
+    });
+
+    
 
     app.get("/user", async (req, res) => {
       const authHeader = req.headers.authorization;
@@ -1355,6 +1401,8 @@ async function run() {
         senderId,
         senderName,
         senderPhotoURL,
+        receiverName,
+        receiverPhotoURL,
         receiverId,
         receiverEmail,
         boardName,
@@ -1369,6 +1417,8 @@ async function run() {
           senderPhotoURL,
           receiverId,
           receiverEmail,
+          receiverName, // Correctly using receiverName
+          receiverPhotoURL, // Correctly using receiverPhotoURL
           status: "pending",
           createdAt: new Date().toISOString(),
         };
@@ -1467,8 +1517,8 @@ async function run() {
             const newMember = {
               userId: receiverId,
               email: receiverEmail,
-              name: joinRequest.senderName,
-              photoURL: joinRequest.senderPhotoURL,
+              name: joinRequest.receiverName,
+              photoURL: joinRequest.receiverPhotoURL,
               role: "member",
             };
 
