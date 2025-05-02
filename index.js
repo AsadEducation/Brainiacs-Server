@@ -21,6 +21,8 @@ const io = new Server(server, {
 // Maintain a mapping of connected users
 const connectedUsers = {};
 
+let boardCollection; // Declare boardCollection globally
+
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
 
@@ -28,6 +30,43 @@ io.on("connection", (socket) => {
   socket.on("identify", (userEmail) => {
     connectedUsers[userEmail] = socket.id; // Map user email to socket ID
     console.log(`User identified: ${userEmail} -> ${socket.id}`);
+  });
+
+  socket.on("sendMessage", async (messageData) => {
+    const { boardId, senderId, senderName, role, text, attachments } = messageData;
+
+    if (!boardId || !senderId || (!text?.trim() && (!attachments || attachments.length === 0))) {
+      console.error("Invalid message data:", messageData);
+      return;
+    }
+
+    try {
+      const message = {
+        messageId: new ObjectId(),
+        senderId,
+        senderName,
+        role,
+        text: text?.trim() || null,
+        attachments: attachments || [],
+        timestamp: new Date().toISOString(),
+      };
+
+      // Save the message to the database
+      const result = await boardCollection.updateOne(
+        { _id: new ObjectId(boardId) },
+        { $push: { messages: message } }
+      );
+
+      if (result.matchedCount > 0) {
+        // Broadcast the message to all clients in the board room
+        io.to(boardId).emit("newMessage", message);
+        console.log("Message broadcasted:", message);
+      } else {
+        console.error("Board not found for ID:", boardId);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   });
 
   socket.on("disconnect", () => {
@@ -73,7 +112,7 @@ async function run() {
     const userCollection = database.collection("users");
     const columnCollection = database.collection("Columns");
     const taskCollection = database.collection("Tasks");
-    const boardCollection = client.db("Brainiacs").collection("boards");
+    boardCollection = database.collection("boards"); // Assign boardCollection here
     const rewardCollection = client.db("Brainiacs").collection("rewards");
     const myProfileCollection = client.db("Brainiacs").collection("myProfile");
     const completedTask = client.db("Brainiacs").collection("completedTask");
