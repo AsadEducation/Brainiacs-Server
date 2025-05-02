@@ -1,0 +1,38 @@
+[33m6c1e5d0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mSiam[m[33m)[m HEAD@{0}: pull origin development: Fast-forward
+[33m379cdef[m[33m ([m[1;31morigin/Siam[m[33m)[m HEAD@{1}: commit: user can sign in
+[33me8b8e0e[m HEAD@{2}: pull origin Siam: Merge made by the 'ort' strategy.
+[33mb9c5278[m HEAD@{3}: commit: send realtime member request
+[33m4904a36[m HEAD@{4}: commit: remove unnecessary comments
+[33m808f315[m HEAD@{5}: commit: add settings route
+[33m7793ba7[m HEAD@{6}: pull origin development: Fast-forward
+[33mab937c0[m HEAD@{7}: commit: fixed voting error
+[33mc6f8e2a[m HEAD@{8}: commit: add image for all features
+[33m624c63e[m HEAD@{9}: commit: fixed the board creation error
+[33m34a8eea[m HEAD@{10}: commit: save user data in database
+[33m1209365[m HEAD@{11}: pull origin development: Fast-forward
+[33m32310b1[m HEAD@{12}: commit: add google userdata in database
+[33m25a0efb[m HEAD@{13}: pull origin development: Fast-forward
+[33m8f4648d[m HEAD@{14}: commit: push last commit
+[33m2b2c3fd[m HEAD@{15}: commit (merge): Merge branch 'development' of https://github.com/AsadEducation/Brainiacs-Server into Siam
+[33ma859896[m HEAD@{16}: commit: now u can file share with each other
+[33mfe119d5[m HEAD@{17}: commit: polling system functionalities added
+[33mda72a1a[m HEAD@{18}: commit: add polling system
+[33m5bf657c[m HEAD@{19}: pull origin development: Fast-forward
+[33mce78611[m HEAD@{20}: commit: add reaction functionalites
+[33m99f8bfe[m HEAD@{21}: commit: add chatting system functionalities
+[33ma1d4d1f[m HEAD@{22}: commit: change board funtionalites
+[33md3d49dc[m HEAD@{23}: commit: add board delete functionalites
+[33m59d09d1[m HEAD@{24}: pull origin development: Fast-forward
+[33m908aa2a[m HEAD@{25}: commit: add board delete functionalites
+[33mc53ac5c[m HEAD@{26}: pull origin development: Fast-forward
+[33m1a6edf0[m HEAD@{27}: pull origin Siam: Merge made by the 'ort' strategy.
+[33m329208f[m HEAD@{28}: commit (merge): add team board create funtionalties
+[33m561382d[m HEAD@{29}: commit: add team board create funtionalties
+[33mafac266[m HEAD@{30}: commit (merge): Merge branch 'development' of https://github.com/AsadEducation/Brainiacs-Server into Siam
+[33mffd18e6[m HEAD@{31}: commit: add team board create funtionalties
+[33m99c26f7[m HEAD@{32}: commit: creating team
+[33m48bd285[m HEAD@{33}: pull origin Siam --rebase: Fast-forward
+[33meafc727[m HEAD@{34}: commit: creating team
+[33m0ae8bf1[m[33m ([m[1;32mdevelopment[m[33m)[m HEAD@{35}: checkout: moving from Siam to Siam
+[33m0ae8bf1[m[33m ([m[1;32mdevelopment[m[33m)[m HEAD@{36}: checkout: moving from development to Siam
+[33m0ae8bf1[m[33m ([m[1;32mdevelopment[m[33m)[m HEAD@{37}: clone: from https://github.com/AsadEducation/Brainiacs-Server.git

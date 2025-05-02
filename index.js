@@ -4,20 +4,56 @@ require("dotenv").config();
 const port = process.env.PORT || 5000;
 const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:5173",
+      "https://brainiacs1.netlify.app",
+      "https://brainiacs-team-collaboration.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  },
+});
+// Maintain a mapping of connected users
+const connectedUsers = {};
+
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  // Listen for user identification
+  socket.on("identify", (userEmail) => {
+    connectedUsers[userEmail] = socket.id; // Map user email to socket ID
+    console.log(`User identified: ${userEmail} -> ${socket.id}`);
+  });
+
+  socket.on("disconnect", () => {
+    // Remove the disconnected user from the mapping
+    for (const email in connectedUsers) {
+      if (connectedUsers[email] === socket.id) {
+        delete connectedUsers[email];
+        console.log(`User disconnected: ${email}`);
+        break;
+      }
+    }
+  });
+});
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(
   cors({
     origin: [
       "http://localhost:5173",
       "https://brainiacs1.netlify.app",
       "https://brainiacs-team-collaboration.vercel.app",
-      //deploy link ta ekhane boshayen please
-      //na hoy may error dite pare.
     ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], // Allow specific HTTP methods
-    allowedHeaders: ["Content-Type", "Authorization"], // Allow specific headers
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -37,17 +73,46 @@ async function run() {
     const userCollection = database.collection("users");
     const columnCollection = database.collection("Columns");
     const taskCollection = database.collection("Tasks");
-    const boardCollection = database.collection("boards");
-    const rewardCollection = database.collection("rewards");
-    const myProfileCollection = database.collection("myProfile");
-    const activityCollection = database.collection("activity");
-    const completedTask = database.collection("completedTask");
-    const leaderboardCollection = database.collection("leaderboard");
+    const boardCollection = client.db("Brainiacs").collection("boards");
+    const rewardCollection = client.db("Brainiacs").collection("rewards");
+    const myProfileCollection = client.db("Brainiacs").collection("myProfile");
+    const completedTask = client.db("Brainiacs").collection("completedTask");
+    const leaderboardCollection = client.db("Brainiacs").collection("leaderboard");
+    const activityCollection = client.db("Brainiacs").collection("activity");
+    const timeSchedulesCollection = client.db("Brainiacs").collection("timeSchedules");
+    const joinRequestCollection = database.collection("joinRequests");
 
-    // completed task
+
+    app.post('/timeSchedules', async (req, res) => {
+      const scheduleData = req.body;
+      const result = await timeSchedulesCollection.insertOne(scheduleData);
+      res.send(result);
+    });
+
+    app.get('/timeSchedules', async (req, res) => {
+      const schedules = await timeSchedulesCollection.find().toArray();
+        res.send(schedules);
+    });
+
+   
+app.put('/timeSchedules/:id', async (req, res) => {
+
+  const id = req.params.id;
+  const updatedData = req.body;
+
+    const result = await timeSchedulesCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData }
+    );
+
+    res.send(result);
+   
+});
+
+
+
     app.get("/completedTask/:email", async (req, res) => {
       const userEmail = req.params.email;
-
       try {
         const result = await completedTask.find({ email: userEmail }).toArray();
         res.send(result);
@@ -61,7 +126,6 @@ async function run() {
 
     app.post("/completedTask", async (req, res) => {
       const taskData = req.body;
-
       try {
         const result = await completedTask.insertOne(taskData);
         res.send({
@@ -77,7 +141,7 @@ async function run() {
       }
     });
 
-    //my profile
+
     app.get("/myProfile", async (req, res) => {
       try {
         const userEmail = req.query.email;
@@ -93,17 +157,14 @@ async function run() {
           .db("Brainiacs")
           .collection("myProfile");
 
-        // Step 1: Get this user's completed tasks
         const userCompletedTasks = await completedTask
           .find({ email: userEmail })
           .toArray();
         const completedCount = userCompletedTasks.length;
         const points = completedCount * 10;
 
-        // Step 2: Get reward data
         const rewardData = await rewardCollection.find().toArray();
 
-        // Step 3: Badge logic
         const unlockedBadges = rewardData.filter(
           (b) => points >= b.pointsRequired
         );
@@ -118,7 +179,6 @@ async function run() {
           ? Math.floor((points / nextBadge.pointsRequired) * 100)
           : 100;
 
-        // Step 4: Prepare profile summary
         const summary = {
           email: userEmail,
           points,
@@ -129,7 +189,6 @@ async function run() {
           badges: rewardData,
         };
 
-        // Step 5: Save to DB
         await myProfileCollection.updateOne(
           { email: userEmail },
           { $set: summary },
@@ -164,7 +223,7 @@ async function run() {
       }
     });
 
-    // leaderboard right code
+// leaderboard right code 
     app.get("/leaderboard", async (req, res) => {
       try {
         const leaderboard = await leaderboardCollection
@@ -182,38 +241,49 @@ async function run() {
         const users = await userCollection.find().toArray();
         const completedTasks = await completedTask.find().toArray();
         const rewards = await rewardCollection.find().toArray();
-
+    
         const leaderboard = users.map((user) => {
           const userCompleted = completedTasks.filter(
             (t) => t.email === user.email
           );
           const points = userCompleted.length * 10;
+    
           const badge = rewards
             .filter((b) => points >= b.pointsRequired)
             .sort((a, b) => b.pointsRequired - a.pointsRequired)[0];
-
+    
+          
+          const name = user.displayName || user.name || "Anonymous";
+    
+       
+          const avatar = user.photoURL || user.photo || "";
+    
           return {
-            name: user.name,
+            name,
             email: user.email,
-            avatar: user.photoURL,
+            avatar,
             points,
             badge: badge?.title || "No Badge",
             badgeImage: badge?.image || null,
             updatedAt: new Date(),
           };
         });
-
+    
         await leaderboardCollection.deleteMany({});
         await leaderboardCollection.insertMany(leaderboard);
-
+    
         res.send({ message: "Leaderboard updated successfully" });
       } catch (err) {
         console.error(err);
         res.status(500).send({ message: "Failed to update leaderboard" });
       }
     });
+    
 
-    // leaderboard
+
+
+    // leaderboard backup code in case of the first code does not run
+    
     // app.get('/leaderboard', async (req, res) => {
     //   try {
     //     const users = await userCollection.find().toArray();
@@ -249,13 +319,12 @@ async function run() {
     //   }
     // });
 
-    //user collection is empty now
-    // user related api
+
+
     app.get("/users", async (req, res) => {
       try {
         const users = await userCollection.find().toArray();
 
-        // Transform photo to photoURL in the response
         const transformedUsers = users.map((user) => {
           if (user.photo) {
             user.photoURL = user.photo;
@@ -270,11 +339,11 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch users" });
       }
     });
+    
 
     app.post("/users", async (req, res) => {
       const newUser = req.body;
 
-      // Validation
       if (!newUser.displayName || !newUser.email || !newUser._id) {
         return res
           .status(400)
@@ -282,15 +351,13 @@ async function run() {
       }
 
       try {
-        // Check if the user already exists
         const existingUser = await userCollection.findOne({
           email: newUser.email.trim(),
         });
         if (existingUser) {
-          return res.status(200).send({ message: "User already exists" }); // Return 200 with a message
+          return res.status(200).send({ message: "User already exists" });
         }
 
-        // Save the user
         const result = await userCollection.insertOne(newUser);
         res.status(201).send(result);
       } catch (error) {
@@ -298,6 +365,8 @@ async function run() {
         res.status(500).send({ error: "Failed to save user" });
       }
     });
+
+    
 
     app.get("/user", async (req, res) => {
       const authHeader = req.headers.authorization;
@@ -308,24 +377,23 @@ async function run() {
           .send({ error: "Authorization token is required" });
       }
 
-      const token = authHeader.split(" ")[1]; // Extract the token
+      const token = authHeader.split(" ")[1];
       try {
-        const email = decodeURIComponent(req.query.email); // Decode the email
+        const email = decodeURIComponent(req.query.email);
         if (!email) {
           return res
             .status(400)
             .send({ error: "Email query parameter is required" });
         }
 
-        console.log(`Fetching user with email: ${email.trim()}`); // Log email being queried
+        console.log(`Fetching user with email: ${email.trim()}`);
         const user = await userCollection.findOne({ email: email.trim() });
 
         if (!user) {
-          console.warn(`User not found for email: ${email.trim()}`); // Log if user is not found
+          console.warn(`User not found for email: ${email.trim()}`);
           return res.status(404).send({ error: "User not found" });
         }
 
-        // Transform photo to photoURL in the response
         if (user.photo) {
           user.photoURL = user.photo;
           delete user.photo;
@@ -346,7 +414,7 @@ async function run() {
           return res.status(400).send({ error: "Email parameter is required" });
         }
 
-        const user = await userCollection.findOne({ email: email.trim() }); // Ensure trimmed email
+        const user = await userCollection.findOne({ email: email.trim() });
         if (!user) {
           return res.status(404).send({ error: "User not found" });
         }
@@ -365,8 +433,8 @@ async function run() {
       }
 
       try {
-        const words = query.split(" ").slice(0, 3).join(" "); // Extract the first three words
-        const regex = new RegExp(`^${words}`, "i"); // Match starting with the first three words
+        const words = query.split(" ").slice(0, 3).join(" ");
+        const regex = new RegExp(`^${words}`, "i");
         const users = await userCollection
           .find({ $or: [{ name: regex }, { email: regex }] })
           .limit(3)
@@ -377,7 +445,6 @@ async function run() {
       }
     });
 
-    // Member search API
     app.get("/members/search", async (req, res) => {
       const { query } = req.query;
 
@@ -386,15 +453,12 @@ async function run() {
       }
 
       try {
-        const regex = new RegExp(query, "i"); // Case-insensitive search
+        const regex = new RegExp(query, "i");
         const users = await userCollection
           .find({
-            $or: [
-              { name: regex }, // Match name
-              { email: regex }, // Match email
-            ],
+            $or: [{ name: regex }, { email: regex }],
           })
-          .limit(10) // Limit results to 10
+          .limit(10)
           .toArray();
 
         res.send(users);
@@ -427,14 +491,12 @@ async function run() {
           return res.status(404).json({ error: "Board not found" });
         }
 
-        // Validate and filter valid userIds
         const validMemberIds = board.members
           ?.map((member) =>
             ObjectId.isValid(member.userId) ? new ObjectId(member.userId) : null
           )
           .filter((id) => id !== null);
 
-        // Populate member details if valid userIds exist
         const memberDetails = validMemberIds.length
           ? await userCollection
               .find({ _id: { $in: validMemberIds } })
@@ -529,31 +591,33 @@ async function run() {
         if (theme !== undefined) updateFields.theme = theme;
 
         if (members !== undefined) {
-          // Get current board to preserve existing members
           const currentBoard = await boardCollection.findOne({
             _id: new ObjectId(id),
           });
 
           const currentMembers = currentBoard?.members || [];
 
-          // Create a map of existing members for quick lookup
           const existingMembersMap = new Map(
             currentMembers.map((member) => [member.userId, member])
           );
 
-          // Process new members
-          const newMembers = await Promise.all(
+          const processedNewMembers = await Promise.all(
             members.map(async (member) => {
-              if (!ObjectId.isValid(member.userId)) {
+              if (!member.userId) {
                 console.warn(`Invalid userId: ${member.userId}`);
                 return null;
               }
 
-              const user = await userCollection.findOne({
-                _id: new ObjectId(member.userId),
-              });
+              const user = ObjectId.isValid(member.userId)
+                ? await userCollection.findOne({
+                    _id: new ObjectId(member.userId),
+                  })
+                : await userCollection.findOne({ _id: member.userId });
 
-              if (!user) return null;
+              if (!user) {
+                console.warn(`User not found for userId: ${member.userId}`);
+                return null;
+              }
 
               return {
                 userId: member.userId,
@@ -565,8 +629,7 @@ async function run() {
             })
           );
 
-          // Filter out nulls and merge with existing members
-          const validNewMembers = newMembers.filter((m) => m !== null);
+          const validNewMembers = processedNewMembers.filter((m) => m !== null);
           const updatedMembers = [...currentMembers];
 
           validNewMembers.forEach((newMember) => {
@@ -600,10 +663,8 @@ async function run() {
       const { id } = req.params;
       const { senderId, senderName, role, text, attachments } = req.body;
 
-      // Log the incoming payload for debugging
       console.log("Incoming message payload:", req.body);
 
-      // Validation (updated)
       if (!ObjectId.isValid(id)) {
         return res.status(400).send({ error: "Invalid board ID" });
       }
@@ -628,14 +689,14 @@ async function run() {
         }
 
         const message = {
-          messageId: new ObjectId(), // Unique ID for the message
+          messageId: new ObjectId(),
           senderId: ObjectId.isValid(senderId)
             ? new ObjectId(senderId)
-            : senderId, // Convert to ObjectId if valid
+            : senderId,
           senderName,
           role,
           text: text?.trim() || null,
-          attachments: attachments || [], // Default to an empty array if no attachments
+          attachments: attachments || [],
           timestamp: new Date().toISOString(),
         };
 
@@ -668,7 +729,7 @@ async function run() {
           {
             _id: new ObjectId(boardId),
             "messages.messageId": new ObjectId(messageId),
-          }, // Convert messageId to ObjectId
+          },
           { $set: { "messages.$.text": text } }
         );
 
@@ -743,7 +804,6 @@ async function run() {
         return res.status(400).send({ error: "seenBy user ID is required" });
       }
 
-      // Validate seenBy as a valid ObjectId or string
       const seenById = ObjectId.isValid(seenBy) ? new ObjectId(seenBy) : seenBy;
 
       try {
@@ -752,7 +812,7 @@ async function run() {
             _id: new ObjectId(boardId),
             "messages.messageId": new ObjectId(messageId),
           },
-          { $addToSet: { "messages.$.seenBy": seenById } } // Add seenBy as a string or ObjectId
+          { $addToSet: { "messages.$.seenBy": seenById } }
         );
 
         if (result.matchedCount === 0) {
@@ -798,22 +858,19 @@ async function run() {
             return res.status(404).send({ error: "Message not found" });
           }
 
-          // Ensure the reactions object is initialized
           if (!message.reactions) {
             message.reactions = {};
           }
 
-          // Remove the user's previous reaction
           for (const [emoji, users] of Object.entries(message.reactions)) {
             if (users.includes(userId)) {
               message.reactions[emoji] = users.filter((id) => id !== userId);
               if (message.reactions[emoji].length === 0) {
-                delete message.reactions[emoji]; // Remove empty reaction
+                delete message.reactions[emoji];
               }
             }
           }
 
-          // Add the new reaction if it's not a removal
           if (reaction) {
             if (!message.reactions[reaction]) {
               message.reactions[reaction] = [];
@@ -821,7 +878,6 @@ async function run() {
             message.reactions[reaction].push(userId);
           }
 
-          // Update the message in the database
           await boardCollection.updateOne(
             {
               _id: new ObjectId(boardId),
@@ -861,7 +917,6 @@ async function run() {
             return res.status(404).send({ error: "Reaction not found" });
           }
 
-          // Remove the emoji key if no users remain
           await boardCollection.updateOne(
             {
               _id: new ObjectId(boardId),
@@ -980,9 +1035,6 @@ async function run() {
       }
     });
 
-    // task management board
-
-    //  column related apis
     app.get("/columns", async (req, res) => {
       console.log("hit the column get");
       const result = await columnCollection.find().sort({ order: 1 }).toArray();
@@ -1035,7 +1087,6 @@ async function run() {
       res.send(result);
     });
 
-    // task related apis
     app.get("/tasks", async (req, res) => {
       const result = await taskCollection.find().sort({ order: 1 }).toArray();
       res.send(result);
@@ -1079,7 +1130,6 @@ async function run() {
           return res.status(404).send({ error: "Board not found" });
         }
 
-        // Check if the user has already created a poll in the last 24 hours
         const now = new Date();
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const recentPoll = board.polls?.find(
@@ -1101,7 +1151,7 @@ async function run() {
           createdAt: now.toISOString(),
           expiresAt: new Date(
             now.getTime() + 24 * 60 * 60 * 1000
-          ).toISOString(), // Set expiration time to 24 hours
+          ).toISOString(),
           isActive: true,
         };
 
@@ -1136,7 +1186,6 @@ async function run() {
           return res.status(404).send({ error: "Board not found" });
         }
 
-        // Automatically deactivate expired polls
         const now = new Date();
         const updatedPolls = board.polls.map((poll) => {
           if (new Date(poll.expiresAt) <= now) {
@@ -1145,7 +1194,6 @@ async function run() {
           return poll;
         });
 
-        // Update the board with the deactivated polls
         await boardCollection.updateOne(
           { _id: new ObjectId(boardId) },
           { $set: { polls: updatedPolls } }
@@ -1162,13 +1210,11 @@ async function run() {
       const { boardId, pollId } = req.params;
       const { userId, optionIndex } = req.body;
 
-      // Validate IDs
       if (!ObjectId.isValid(boardId) || !ObjectId.isValid(pollId)) {
         return res.status(400).send({ error: "Invalid board or poll ID" });
       }
 
       try {
-        // 1. Fetch the board and poll
         const board = await boardCollection.findOne({
           _id: new ObjectId(boardId),
         });
@@ -1177,7 +1223,6 @@ async function run() {
         const poll = board.polls.find((p) => p._id.toString() === pollId);
         if (!poll) return res.status(404).send({ error: "Poll not found" });
 
-        // 2. Check if user already voted on the specific option
         const hasVotedOnOption = poll.options[optionIndex].votes.some(
           (vote) => vote.userId === userId
         );
@@ -1187,24 +1232,20 @@ async function run() {
             .send({ error: "User already voted on this option" });
         }
 
-        // 3. Fetch user details from userCollection
-        const user = await userCollection.findOne({
-          _id: new ObjectId(userId),
-        });
+        const user = ObjectId.isValid(userId)
+          ? await userCollection.findOne({ _id: new ObjectId(userId) })
+          : await userCollection.findOne({ _id: userId });
         if (!user) return res.status(404).send({ error: "User not found" });
 
-        // 4. Add vote with user details
         const voteData = {
           userId,
           name: user.name,
           email: user.email,
-          photoURL: user.photoURL, // Include user's profile photo if available
+          photoURL: user.photoURL,
         };
 
-        // Add the vote to the specified option
         poll.options[optionIndex].votes.push(voteData);
 
-        // 5. Update the poll in the database
         await boardCollection.updateOne(
           { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
           { $set: { "polls.$": poll } }
@@ -1227,7 +1268,7 @@ async function run() {
       try {
         const result = await boardCollection.updateOne(
           { _id: new ObjectId(boardId) },
-          { $pull: { polls: { _id: new ObjectId(pollId) } } } // Remove the poll
+          { $pull: { polls: { _id: new ObjectId(pollId) } } }
         );
 
         if (result.modifiedCount === 0) {
@@ -1252,7 +1293,6 @@ async function run() {
         }
 
         try {
-          // Fetch the board and poll
           const board = await boardCollection.findOne({
             _id: new ObjectId(boardId),
           });
@@ -1261,7 +1301,6 @@ async function run() {
           const poll = board.polls.find((p) => p._id.toString() === pollId);
           if (!poll) return res.status(404).send({ error: "Poll not found" });
 
-          // Check if the user has voted on the specific option
           const optionVotes = poll.options[optionIndex].votes;
           const voteIndex = optionVotes.findIndex(
             (vote) => vote.userId === userId
@@ -1272,10 +1311,8 @@ async function run() {
               .send({ error: "User has not voted on this option" });
           }
 
-          // Remove the user's vote
           optionVotes.splice(voteIndex, 1);
 
-          // Update the poll in the database
           await boardCollection.updateOne(
             { _id: new ObjectId(boardId), "polls._id": new ObjectId(pollId) },
             { $set: { "polls.$": poll } }
@@ -1288,8 +1325,6 @@ async function run() {
         }
       }
     );
-
-    // activity related api
 
     app.get("/activity", async (req, res) => {
       const email = req.query?.email;
@@ -1312,8 +1347,201 @@ async function run() {
       const result = await activityCollection.insertOne(activityObject);
       res.send(result);
     });
+
+    app.get("/boards/search", async (req, res) => {
+      const { query } = req.query;
+
+      if (!query) {
+        return res.status(400).send({ error: "Query parameter is required" });
+      }
+
+      try {
+        const regex = new RegExp(query, "i");
+        const boards = await boardCollection
+          .find({
+            $or: [{ name: regex }, { description: regex }],
+          })
+          .toArray();
+
+        res.send(boards);
+      } catch (error) {
+        console.error("Error searching boards:", error);
+        res.status(500).send({ error: "Failed to search boards" });
+      }
+    });
+
+    app.put("/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const { displayName, photoURL, password } = req.body;
+
+      try {
+        const updateFields = {};
+        if (displayName) updateFields.displayName = displayName;
+        if (photoURL) updateFields.photoURL = photoURL;
+        if (password) updateFields.password = password;
+
+        const result = await userCollection.updateOne(
+          { email: email.trim() },
+          { $set: updateFields }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ error: "User not found" });
+        }
+
+        res.send({ message: "User updated successfully" });
+      } catch (error) {
+        console.error("Error updating user:", error);
+        res.status(500).send({ error: "Failed to update user" });
+      }
+    });
+
+    // Endpoint to create a join request
+    // In your /join-requests endpoint
+    app.post("/join-requests", async (req, res) => {
+      const {
+        boardId,
+        senderId,
+        senderName,
+        senderPhotoURL,
+        receiverName,
+        receiverPhotoURL,
+        receiverId,
+        receiverEmail,
+        boardName,
+      } = req.body;
+
+      try {
+        const joinRequest = {
+          boardId,
+          boardName,
+          senderId,
+          senderName,
+          senderPhotoURL,
+          receiverId,
+          receiverEmail,
+          receiverName, // Correctly using receiverName
+          receiverPhotoURL, // Correctly using receiverPhotoURL
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        };
+
+        // Save to database
+        const result = await joinRequestCollection.insertOne(joinRequest);
+        const savedRequest = { ...joinRequest, _id: result.insertedId };
+
+        // Emit to receiver
+        const receiverSocketId = connectedUsers[receiverEmail];
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("join-request-sent", {
+            receiverEmail,
+            joinRequest: savedRequest,
+          });
+          console.log(`Sent join request to ${receiverEmail}`);
+        } else {
+          console.log(
+            `Receiver ${receiverEmail} not connected, will see on next login`
+          );
+        }
+
+        res.status(201).send(savedRequest);
+      } catch (error) {
+        console.error("Error creating join request:", error);
+        res.status(500).send({ error: "Failed to create join request" });
+      }
+    });
+
+    // Endpoint to fetch join requests for the current user
+    app.get("/join-requests", async (req, res) => {
+      const { email } = req.query;
+
+      if (!email) {
+        return res
+          .status(400)
+          .send({ error: "Email query parameter is required" });
+      }
+
+      try {
+        // Fetch join requests where the receiver's email matches the provided email
+        const joinRequests = await joinRequestCollection
+          .find({ receiverEmail: email, status: "pending" })
+          .toArray();
+
+        res.send(joinRequests);
+      } catch (error) {
+        console.error("Error fetching join requests:", error);
+        res.status(500).send({ error: "Failed to fetch join requests" });
+      }
+    });
+
+    app.patch("/join-requests/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: "Invalid join request ID" });
+      }
+
+      if (!status || !["accepted", "rejected"].includes(status)) {
+        return res.status(400).send({ error: "Invalid status value" });
+      }
+
+      try {
+        const joinRequest = await joinRequestCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!joinRequest) {
+          return res.status(404).send({ error: "Join request not found" });
+        }
+
+        // Update the join request status
+        await joinRequestCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (status === "accepted") {
+          // Add the user as a member to the board
+          const { boardId, receiverId, receiverEmail } = joinRequest;
+
+          const board = await boardCollection.findOne({
+            _id: new ObjectId(boardId),
+          });
+          if (!board) {
+            return res.status(404).send({ error: "Board not found" });
+          }
+
+          const isAlreadyMember = board.members.some(
+            (member) => member.userId === receiverId
+          );
+
+          if (!isAlreadyMember) {
+            const newMember = {
+              userId: receiverId,
+              email: receiverEmail,
+              name: joinRequest.receiverName,
+              photoURL: joinRequest.receiverPhotoURL,
+              role: "member",
+            };
+
+            await boardCollection.updateOne(
+              { _id: new ObjectId(boardId) },
+              { $push: { members: newMember } }
+            );
+          }
+        }
+
+        // Notify all connected clients about the updated join requests
+        io.emit("join-requests-updated");
+
+        res.send({ message: "Join request updated successfully" });
+      } catch (error) {
+        console.error("Error updating join request:", error);
+        res.status(500).send({ error: "Failed to update join request" });
+      }
+    });
   } finally {
-    // Ensure the client connection is properly closed if needed
   }
 }
 run().catch(console.dir);
@@ -1322,6 +1550,6 @@ app.get("/", (req, res) => {
   res.send(" Brainiacs Server is running in Brain");
 });
 
-app.listen(port, () => {
-  console.log(`server is running properly at : ${port}`);
+server.listen(port, () => {
+  console.log(`Server is running properly at: http://localhost:${port}`);
 });
