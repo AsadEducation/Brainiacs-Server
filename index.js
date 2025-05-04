@@ -799,6 +799,26 @@ app.put('/timeSchedules/:id', async (req, res) => {
       }
 
       try {
+        const board = await boardCollection.findOne({ _id: new ObjectId(boardId) });
+        if (!board) {
+          return res.status(404).send({ error: "Board not found" });
+        }
+
+        const message = board.messages.find(
+          (msg) => msg.messageId.toString() === messageId
+        );
+
+        if (!message) {
+          return res.status(404).send({ error: "Message not found" });
+        }
+
+        // Ensure the user deleting the message is the sender
+        if (message.senderId.toString() !== req.body.senderId) {
+          return res
+            .status(403)
+            .send({ error: "You can only delete messages you have sent." });
+        }
+
         const result = await boardCollection.updateOne(
           {
             _id: new ObjectId(boardId),
@@ -806,7 +826,7 @@ app.put('/timeSchedules/:id', async (req, res) => {
           },
           {
             $set: {
-              "messages.$.text": null,
+              "messages.$.text": `Message deleted by ${deletedBy}`,
               "messages.$.deletedBy": deletedBy,
               "messages.$.deletedAt": deletedAt,
             },
@@ -1565,6 +1585,9 @@ app.put('/timeSchedules/:id', async (req, res) => {
               { _id: new ObjectId(boardId) },
               { $push: { members: newMember } }
             );
+
+            // Emit a socket event to notify all clients about the new member
+            io.emit("member-added", { boardId, newMember });
           }
         }
 
