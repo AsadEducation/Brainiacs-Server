@@ -191,7 +191,7 @@ app.put('/timeSchedules/:id', async (req, res) => {
         const completedTask = client
           .db("Brainiacs")
           .collection("completedTask");
-        const rewardCollection = client.db("Brainiacs").collection("rewards");
+        const rewardCollection = database.collection("rewards");
         const myProfileCollection = client
           .db("Brainiacs")
           .collection("myProfile");
@@ -1081,12 +1081,13 @@ app.put('/timeSchedules/:id', async (req, res) => {
         const result = await boardCollection.deleteOne({
           _id: new ObjectId(id),
         });
+        
 
         if (result.deletedCount === 0) {
           return res.status(404).send({ error: "Board not found" });
         }
 
-        res.send({ message: "Board deleted successfully" });
+        res.send({ message: "Board deleted successfully", deletedCount: result.deletedCount });
       } catch (error) {
         console.error("Error deleting board:", error);
         res.status(500).send({ error: "Failed to delete board" });
@@ -1124,7 +1125,7 @@ app.put('/timeSchedules/:id', async (req, res) => {
     });
 
     app.put("/columnName", async (req, res) => {
-      const { id, tittle } = req.body;
+      const { id, tittle } = req.body; console.log(req.body);
       console.log("Column Name update");
       const query = {
         id: id,
@@ -1134,7 +1135,7 @@ app.put('/timeSchedules/:id', async (req, res) => {
           tittle: tittle,
         },
       };
-      const result = await columnCollection.updateOne(query, updateInfo);
+      const result = await columnCollection.updateOne(query, updateInfo); //console.log(result);
       res.send(result);
     });
 
@@ -1161,7 +1162,7 @@ app.put('/timeSchedules/:id', async (req, res) => {
       console.log("taskSet:", taskSet);
       const updateOperations = taskSet.map((task, index) => {
         const { _id, ...taskData } = task;
-        taskCollection.updateOne(
+        return taskCollection.updateOne(
           { id: task.id },
           { $set: { ...taskData, order: index } },
           { upsert: true }
@@ -1385,15 +1386,17 @@ app.put('/timeSchedules/:id', async (req, res) => {
     );
 
     app.get("/activity", async (req, res) => {
-      const userEmail = req.query?.email;
+      const email = req.query?.email;
+      console.log("activity email", email);
 
       let query = {};
 
-      if (userEmail && userEmail !== "undefined") {
-        query.userEmail;
-      }
+      if (email && email !== "undefined") {
+        query["currentUser.email"] = email;
+      } else return;
 
       const result = await activityCollection.find(query).toArray();
+      console.log(result);
 
       res.send(result);
     });
